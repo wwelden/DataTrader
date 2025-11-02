@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend/handlers"
+	"backend/middleware"
 	"log"
 	"log/slog"
 	"net/http"
@@ -12,17 +13,19 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatal(err)
+	}
+
 	InitDB()
 	defer db.Close()
 
 	handlers.SetDB(db)
 
-	if err := godotenv.Load(); err != nil {
-		log.Fatal(err)
-	}
+	middleware.StartSessionCleanup()
+
 	router := chi.NewMux()
 
-	// Serve CSS with correct MIME type
 	router.Get("/public/style.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		http.ServeFile(w, r, "public/style.css")
@@ -30,26 +33,66 @@ func main() {
 
 	router.Handle("/public/*", public())
 
-	// Page routes
-	router.Get("/", handlers.HandleHome)
-	router.Get("/positions.html", handlers.HandlePositions)
-	router.Get("/history.html", handlers.HandleHistory)
+	router.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 
-	// Modal routes
-	router.Get("/modal/add-position.html", handlers.HandleModalAddPosition)
-	router.Get("/modal/add-position-fields.html", handlers.HandleModalAddPositionFields)
-	router.Get("/modal/close", handlers.HandleModalClose)
+	// Auth routes (no middleware)
+	router.Get("/login", handlers.HandleLogin)
+	router.Post("/api/auth/login", handlers.HandleLoginPost)
+	router.Get("/signup", handlers.HandleSignup)
+	router.Post("/api/auth/signup", handlers.HandleSignupPost)
+	router.Post("/api/logout", handlers.HandleLogout)
 
-	// API routes
-	router.Get("/api/stats", handlers.HandleStats)
-	router.Post("/api/positions/add", handlers.HandleAddPosition)
-	router.Get("/api/positions/stocks", handlers.HandleGetStockPositions)
-	router.Get("/api/positions/options", handlers.HandleGetOptionPositions)
-	router.Post("/api/positions/close/{id}", handlers.HandleClosePosition)
-	router.Post("/api/positions/close-stock/{id}", handlers.HandleCloseStockPosition)
-	router.Post("/api/positions/close-option/{id}", handlers.HandleCloseOptionPosition)
-	router.Get("/api/history/stocks", handlers.HandleGetClosedStocks)
-	router.Get("/api/history/options", handlers.HandleGetClosedOptions)
+	// Protected routes group
+	router.Group(func(r chi.Router) {
+		r.Use(middleware.RequireAuth)
+
+		// Page routes
+		r.Get("/", handlers.HandleHome)
+		r.Get("/positions.html", handlers.HandlePositions)
+		r.Get("/history.html", handlers.HandleHistory)
+
+		// Modal routes
+		r.Get("/modal/add-position.html", handlers.HandleModalAddPosition)
+		r.Get("/modal/add-position-fields.html", handlers.HandleModalAddPositionFields)
+		r.Get("/modal/close", handlers.HandleModalClose)
+
+		// API routes
+		r.Get("/api/stats", handlers.HandleStats)
+		r.Post("/api/positions/add", handlers.HandleAddPosition)
+		r.Get("/api/positions/stocks", handlers.HandleGetStockPositions)
+		r.Get("/api/positions/options", handlers.HandleGetOptionPositions)
+
+		// Edit routes
+		r.Get("/api/positions/edit-stock/{id}", handlers.HandleEditStockPosition)
+		r.Post("/api/positions/update-stock/{id}", handlers.HandleUpdateStockPosition)
+		r.Get("/api/positions/edit-option/{id}", handlers.HandleEditOptionPosition)
+		r.Post("/api/positions/update-option/{id}", handlers.HandleUpdateOptionPosition)
+
+		// Delete routes
+		r.Delete("/api/positions/stock/{id}", handlers.HandleDeleteStockPosition)
+		r.Delete("/api/positions/option/{id}", handlers.HandleDeleteOptionPosition)
+
+		// Close routes
+		r.Post("/api/positions/close/{id}", handlers.HandleClosePosition)
+		r.Post("/api/positions/close-stock/{id}", handlers.HandleCloseStockPosition)
+		r.Post("/api/positions/close-option/{id}", handlers.HandleCloseOptionPosition)
+
+		// History routes
+		r.Get("/api/history/stocks", handlers.HandleGetClosedStocks)
+		r.Get("/api/history/options", handlers.HandleGetClosedOptions)
+
+		// History edit routes
+		r.Get("/api/history/edit-stock/{id}", handlers.HandleEditClosedStock)
+		r.Post("/api/history/update-stock/{id}", handlers.HandleUpdateClosedStock)
+		r.Get("/api/history/edit-option/{id}", handlers.HandleEditClosedOption)
+		r.Post("/api/history/update-option/{id}", handlers.HandleUpdateClosedOption)
+
+		// History delete routes
+		r.Delete("/api/history/stock/{id}", handlers.HandleDeleteClosedStock)
+		r.Delete("/api/history/option/{id}", handlers.HandleDeleteClosedOption)
+	})
 
 	port := os.Getenv("PORT")
 	slog.Info("HTTP server started", "listenAddr", port)

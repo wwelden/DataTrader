@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Sign Up - TSTrader</title>
+        <link rel="stylesheet" href="/public/style.css" />
+    </head>
+    <body>
+        <div id="app">
+            <div class="auth-container">
+                <div class="auth-card">
+                    <h1 class="logo">TSTrader</h1>
+                    <h2>Create Account</h2>
+
+                    {{if .Error}}
+                    <div class="error-message">{{.Error}}</div>
+                    {{end}}
+
+                    <form
+                        method="POST"
+                        action="/api/auth/signup"
+                        class="auth-form"
+                    >
+                        <div class="form-group">
+                            <label for="username">Username</label>
+                            <input
+                                type="text"
+                                id="username"
+                                name="username"
+                                required
+                                autofocus
+                                placeholder="Choose a username"
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password">Password</label>
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                required
+                                minlength="8"
+                                placeholder="At least 8 characters"
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="confirm_password"
+                                >Confirm Password</label
+                            >
+                            <input
+                                type="password"
+                                id="confirm_password"
+                                name="confirm_password"
+                                required
+                                minlength="8"
+                                placeholder="Re-enter your password"
+                            />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            Create Account
+                        </button>
+                    </form>
+
+                    <p class="auth-footer">
+                        Already have an account?
+                        <a href="/login">Sign in</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .auth-container {
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: linear-gradient(
+                    135deg,
+                    var(--primary-color) 0%,
+                    #1e40af 100%
+                );
+            }
+            .auth-card {
+                background: var(--surface-color);
+                padding: 3rem;
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+                max-width: 450px;
+                width: 90%;
+            }
+            .auth-card .logo {
+                color: var(--primary-color);
+                margin-bottom: 1rem;
+                font-size: 2rem;
+                text-align: center;
+            }
+            .auth-card h2 {
+                margin-bottom: 2rem;
+                color: var(--text-primary);
+                text-align: center;
+            }
+            .auth-form {
+                display: flex;
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+            .form-group {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .form-group label {
+                color: var(--text-primary);
+                font-weight: 500;
+            }
+            .form-group input {
+                padding: 0.75rem;
+                border: 1px solid #374151;
+                border-radius: 6px;
+                background: var(--bg-color);
+                color: var(--text-primary);
+                font-size: 1rem;
+            }
+            .form-group input:focus {
+                outline: 2px solid var(--primary-color);
+                outline-offset: 2px;
+            }
+            .btn {
+                padding: 0.75rem 1.5rem;
+                border: none;
+                border-radius: 6px;
+                font-size: 1rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .btn-primary {
+                background: var(--primary-color);
+                color: white;
+            }
+            .btn-primary:hover {
+                background: #1e40af;
+            }
+            .error-message {
+                padding: 1rem;
+                background: #fee2e2;
+                border: 1px solid #fca5a5;
+                border-radius: 6px;
+                color: #dc2626;
+                margin-bottom: 1rem;
+            }
+            .auth-footer {
+                text-align: center;
+                margin-top: 1.5rem;
+                color: var(--text-secondary);
+            }
+            .auth-footer a {
+                color: var(--primary-color);
+                text-decoration: none;
+            }
+            .auth-footer a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </body>
+</html>

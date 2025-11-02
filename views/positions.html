@@ -52,8 +52,9 @@
                     <div class="positions-section">
                         <h3>Stock Positions</h3>
                         <div
+                            id="stock-positions-list"
                             hx-get="/api/positions/stocks"
-                            hx-trigger="load"
+                            hx-trigger="load, positionAdded from:body, positionClosed from:body"
                             hx-swap="innerHTML"
                         >
                             <p>Loading stock positions...</p>
@@ -63,8 +64,9 @@
                     <div class="positions-section">
                         <h3>Option Positions</h3>
                         <div
+                            id="option-positions-list"
                             hx-get="/api/positions/options"
-                            hx-trigger="load"
+                            hx-trigger="load, positionAdded from:body, positionClosed from:body"
                             hx-swap="innerHTML"
                         >
                             <p>Loading option positions...</p>

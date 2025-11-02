@@ -46,8 +46,9 @@
                     <div class="history-section">
                         <h3>Closed Stocks</h3>
                         <div
+                            id="closed-stocks-list"
                             hx-get="/api/history/stocks"
-                            hx-trigger="load"
+                            hx-trigger="load, historyUpdated from:body"
                             hx-swap="innerHTML"
                         >
                             <p>Loading closed stock trades...</p>
@@ -57,8 +58,9 @@
                     <div class="history-section">
                         <h3>Closed Options</h3>
                         <div
+                            id="closed-options-list"
                             hx-get="/api/history/options"
-                            hx-trigger="load"
+                            hx-trigger="load, historyUpdated from:body"
                             hx-swap="innerHTML"
                         >
                             <p>Loading closed option trades...</p>
@@ -67,5 +69,7 @@
                 </div>
             </main>
         </div>
+
+        <div id="modal-container"></div>
     </body>
 </html>
