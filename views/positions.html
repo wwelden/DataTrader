@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Positions - TSTrader</title>
+        <link rel="stylesheet" href="/public/style.css" />
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    </head>
+    <body>
+        <div id="app">
+            <nav class="navbar">
+                <div class="nav-container">
+                    <h1 class="logo">DATATRADER</h1>
+                    <ul class="nav-links">
+                        <li>
+                            <a href="/" class="nav-link">Home</a>
+                        </li>
+                        <li>
+                            <a href="/positions.html" class="nav-link active"
+                                >Positions</a
+                            >
+                        </li>
+                        <li>
+                            <a href="/history.html" class="nav-link">History</a>
+                        </li>
+                    </ul>
+                    <button
+                        hx-post="/api/logout"
+                        hx-target="body"
+                        class="logout-btn"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </nav>
+
+            <main class="main-content">
+                <div class="page-header">
+                    <h2>Positions</h2>
+                    <button
+                        class="btn btn-primary"
+                        hx-get="/modal/add-position.html"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML"
+                    >
+                        Add Position
+                    </button>
+                </div>
+
+                <div class="positions-container">
+                    <div class="positions-section">
+                        <h3>Stock Positions</h3>
+                        <div
+                            hx-get="/api/positions/stocks"
+                            hx-trigger="load"
+                            hx-swap="innerHTML"
+                        >
+                            <p>Loading stock positions...</p>
+                        </div>
+                    </div>
+
+                    <div class="positions-section">
+                        <h3>Option Positions</h3>
+                        <div
+                            hx-get="/api/positions/options"
+                            hx-trigger="load"
+                            hx-swap="innerHTML"
+                        >
+                            <p>Loading option positions...</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <div id="modal-container"></div>
+    </body>
+</html>

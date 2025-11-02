@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>History - TSTrader</title>
+        <link rel="stylesheet" href="/public/style.css" />
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    </head>
+    <body>
+        <div id="app">
+            <nav class="navbar">
+                <div class="nav-container">
+                    <h1 class="logo">DATATRADER</h1>
+                    <ul class="nav-links">
+                        <li>
+                            <a href="/" class="nav-link">Home</a>
+                        </li>
+                        <li>
+                            <a href="/positions.html" class="nav-link"
+                                >Positions</a
+                            >
+                        </li>
+                        <li>
+                            <a href="/history.html" class="nav-link active"
+                                >History</a
+                            >
+                        </li>
+                    </ul>
+                    <button
+                        hx-post="/api/logout"
+                        hx-target="body"
+                        class="logout-btn"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </nav>
+
+            <main class="main-content">
+                <div class="page-header">
+                    <h2>Trading History</h2>
+                </div>
+
+                <div class="history-container">
+                    <div class="history-section">
+                        <h3>Closed Stocks</h3>
+                        <div
+                            hx-get="/api/history/stocks"
+                            hx-trigger="load"
+                            hx-swap="innerHTML"
+                        >
+                            <p>Loading closed stock trades...</p>
+                        </div>
+                    </div>
+
+                    <div class="history-section">
+                        <h3>Closed Options</h3>
+                        <div
+                            hx-get="/api/history/options"
+                            hx-trigger="load"
+                            hx-swap="innerHTML"
+                        >
+                            <p>Loading closed option trades...</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </body>
+</html>
