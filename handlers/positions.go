@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -26,7 +27,6 @@ func HandleModalAddPositionFields(w http.ResponseWriter, r *http.Request) {
 	if positionType == "option" {
 		http.ServeFile(w, r, filepath.Join("views", "modal", "add-position-fields.html"))
 	} else {
-		// Return empty for stock (no additional fields needed)
 		w.Write([]byte(""))
 	}
 }
@@ -54,7 +54,6 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 	openDate := r.FormValue("openDate")
 
 	if positionType == "stock" {
-		// Check if position already exists for this ticker
 		var existingID int
 		var existingQuantity, existingCostBasis float64
 		err := db.QueryRow(`
@@ -64,7 +63,6 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 		`, userID, ticker).Scan(&existingID, &existingQuantity, &existingCostBasis)
 
 		if err == nil {
-			// Position exists, update it by averaging the cost basis
 			totalQuantity := existingQuantity + quantity
 			totalCost := (existingCostBasis * existingQuantity) + (costBasis * quantity)
 			newCostBasis := totalCost / totalQuantity
@@ -80,7 +78,6 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			// Position doesn't exist, insert new one
 			_, err = db.Exec(`
 				INSERT INTO stock_positions (user_id, ticker, quantity, cost_basis, open_date)
 				VALUES (?, ?, ?, ?, ?)
@@ -109,7 +106,6 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "positionAdded")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
@@ -253,25 +249,19 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
-	// Extract position ID from URL path using chi
 	positionID := chi.URLParam(r, "id")
-	fmt.Printf("🔍 HandleClosePosition called with ID: '%s'\n", positionID)
 
 	if positionID == "" {
-		fmt.Printf("✗ No position ID provided\n")
 		http.Error(w, "Position ID required", http.StatusBadRequest)
 		return
 	}
 
 	userID, ok := GetOrCreateUserID(r)
 	if !ok {
-		fmt.Printf("✗ Unauthorized user\n")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	fmt.Printf("✓ User ID: %d, Position ID: %s\n", userID, positionID)
 
-	// First, try to find if it's a stock position
 	var ticker string
 	var quantity, costBasis float64
 	var openDate string
@@ -283,10 +273,6 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 	`, positionID, userID).Scan(&ticker, &quantity, &costBasis, &openDate)
 
 	if err == nil {
-		// It's a stock position - move to closed_stocks
-		// For now, we'll ask user for sell price and close date via a modal
-		// But for this simple version, let's return a form to collect that info
-
 		html := fmt.Sprintf(`
 			<div class="modal">
 				<div class="modal-content">
@@ -299,8 +285,8 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 							<input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" />
 						</div>
 						<div class="form-group">
-							<label>Close Date</label>
-							<input type="date" name="closeDate" required />
+							<label>Close Date (defaults to today)</label>
+							<input type="date" name="closeDate" />
 						</div>
 						<div class="form-actions">
 							<button type="submit" class="btn btn-primary">Close Position</button>
@@ -318,7 +304,6 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try option position
 	var price, premium, strike, collateral float64
 	var expDate, purchaseDate string
 	var optionType types.OptionType
@@ -330,7 +315,6 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 	`, positionID, userID).Scan(&ticker, &price, &premium, &strike, &expDate, &optionType, &collateral, &purchaseDate)
 
 	if err == nil {
-		// It's an option position
 		html := fmt.Sprintf(`
 			<div class="modal">
 				<div class="modal-content">
@@ -343,8 +327,8 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 							<input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" />
 						</div>
 						<div class="form-group">
-							<label>Close Date</label>
-							<input type="date" name="closeDate" required />
+							<label>Close Date (defaults to today)</label>
+							<input type="date" name="closeDate" />
 						</div>
 						<div class="form-actions">
 							<button type="submit" class="btn btn-primary">Close Position</button>
@@ -375,6 +359,9 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 
 	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
 	closeDate := r.FormValue("closeDate")
+	if closeDate == "" {
+		closeDate = time.Now().Format("2006-01-02")
+	}
 
 	userID, ok := GetOrCreateUserID(r)
 	if !ok {
@@ -382,7 +369,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the stock position details
 	var ticker string
 	var quantity, costBasis float64
 	var openDate string
@@ -398,10 +384,8 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate profit/loss
 	profitLoss := (sellPrice - costBasis) * quantity
 
-	// Check if a closed position already exists for this ticker and dates
 	var existingID int
 	var existingQuantity, existingCostBasis, existingSellPrice, existingProfitLoss float64
 	err = db.QueryRow(`
@@ -411,7 +395,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	`, userID, ticker, openDate).Scan(&existingID, &existingQuantity, &existingCostBasis, &existingSellPrice, &existingProfitLoss)
 
 	if err == nil {
-		// Position exists, update it by adding to the existing values
 		totalQuantity := existingQuantity + quantity
 		totalCostBasis := ((existingCostBasis * existingQuantity) + (costBasis * quantity)) / totalQuantity
 		totalSellPrice := ((existingSellPrice * existingQuantity) + (sellPrice * quantity)) / totalQuantity
@@ -428,7 +411,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Position doesn't exist, insert new one
 		_, err = db.Exec(`
 			INSERT INTO closed_stocks (user_id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -440,14 +422,12 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Delete from stock_positions
 	_, err = db.Exec(`DELETE FROM stock_positions WHERE id = ?`, positionID)
 	if err != nil {
 		http.Error(w, "Failed to remove position: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "positionClosed")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
@@ -462,6 +442,9 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 
 	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
 	closeDate := r.FormValue("closeDate")
+	if closeDate == "" {
+		closeDate = time.Now().Format("2006-01-02")
+	}
 
 	userID, ok := GetOrCreateUserID(r)
 	if !ok {
@@ -469,7 +452,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the option position details
 	var ticker string
 	var price, premium, strike, collateral float64
 	var expDate, purchaseDate string
@@ -486,18 +468,14 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate profit/loss (depends on option type)
 	var profitLoss float64
 	switch optionType {
 	case types.Call, types.Put:
-		// Buying options: P/L = Sell Price - Premium Paid
 		profitLoss = sellPrice - premium
 	case types.CSP, types.CC:
-		// Selling options: P/L = Premium Collected - Buyback Price
 		profitLoss = premium - sellPrice
 	}
 
-	// Check if a closed option already exists for this ticker, type, strike, and dates
 	var existingID int
 	var existingPrice, existingPremium, existingCollateral, existingSellPrice, existingProfitLoss float64
 	err = db.QueryRow(`
@@ -507,7 +485,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 	`, userID, ticker, optionType, strike, expDate, purchaseDate).Scan(&existingID, &existingPrice, &existingPremium, &existingCollateral, &existingSellPrice, &existingProfitLoss)
 
 	if err == nil {
-		// Position exists, update it by averaging prices and adding profit/loss
 		avgPrice := (existingPrice + price) / 2
 		avgPremium := (existingPremium + premium) / 2
 		totalCollateral := existingCollateral + collateral
@@ -525,7 +502,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Position doesn't exist, insert new one
 		_, err = db.Exec(`
 			INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date, close_date, sell_price, profit_loss)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -537,19 +513,16 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Delete from option_positions
 	_, err = db.Exec(`DELETE FROM option_positions WHERE id = ?`, positionID)
 	if err != nil {
 		http.Error(w, "Failed to remove position: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "positionClosed")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
 
-// HandleEditStockPosition shows edit modal for a stock position
 func HandleEditStockPosition(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -559,7 +532,6 @@ func HandleEditStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the position details
 	var ticker string
 	var quantity, costBasis float64
 	var openDate string
@@ -575,7 +547,6 @@ func HandleEditStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return edit form modal
 	modalHTML := fmt.Sprintf(`
 		<div class="modal">
 			<div class="modal-content">
@@ -612,7 +583,6 @@ func HandleEditStockPosition(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(modalHTML))
 }
 
-// HandleEditOptionPosition shows edit modal for an option position
 func HandleEditOptionPosition(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -622,7 +592,6 @@ func HandleEditOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the position details
 	var ticker string
 	var price, premium, strike, collateral float64
 	var expDate, purchaseDate, optionType string
@@ -638,7 +607,6 @@ func HandleEditOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return edit form modal
 	modalHTML := fmt.Sprintf(`
 		<div class="modal">
 			<div class="modal-content">
@@ -699,7 +667,6 @@ func HandleEditOptionPosition(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(modalHTML))
 }
 
-// HandleUpdateStockPosition updates a stock position
 func HandleUpdateStockPosition(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -729,12 +696,10 @@ func HandleUpdateStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "positionAdded")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
 
-// HandleUpdateOptionPosition updates an option position
 func HandleUpdateOptionPosition(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -768,12 +733,10 @@ func HandleUpdateOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "positionAdded")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
 
-// Helper function for select option selected attribute
 func selected(current, value string) string {
 	if current == value {
 		return "selected"
@@ -781,7 +744,6 @@ func selected(current, value string) string {
 	return ""
 }
 
-// HandleDeleteStockPosition deletes a stock position
 func HandleDeleteStockPosition(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -791,19 +753,16 @@ func HandleDeleteStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete the position
 	_, err := db.Exec("DELETE FROM stock_positions WHERE id = ? AND user_id = ?", positionID, userID)
 	if err != nil {
 		http.Error(w, "Failed to delete position", http.StatusInternalServerError)
 		return
 	}
 
-	// Return the updated list
 	w.Header().Set("HX-Trigger", "positionDeleted")
 	HandleGetStockPositions(w, r)
 }
 
-// HandleDeleteOptionPosition deletes an option position
 func HandleDeleteOptionPosition(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -813,19 +772,16 @@ func HandleDeleteOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete the position
 	_, err := db.Exec("DELETE FROM option_positions WHERE id = ? AND user_id = ?", positionID, userID)
 	if err != nil {
 		http.Error(w, "Failed to delete position", http.StatusInternalServerError)
 		return
 	}
 
-	// Return the updated list
 	w.Header().Set("HX-Trigger", "positionDeleted")
 	HandleGetOptionPositions(w, r)
 }
 
-// Helper function to return JSON error
 func jsonError(w http.ResponseWriter, message string, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)

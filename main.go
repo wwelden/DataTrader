@@ -56,6 +56,7 @@ func main() {
 		// Modal routes
 		r.Get("/modal/add-position.html", handlers.HandleModalAddPosition)
 		r.Get("/modal/add-position-fields.html", handlers.HandleModalAddPositionFields)
+		r.Get("/modal/import-csv.html", handlers.HandleModalImportCSV)
 		r.Get("/modal/close", handlers.HandleModalClose)
 
 		// API routes
@@ -92,6 +93,9 @@ func main() {
 		// History delete routes
 		r.Delete("/api/history/stock/{id}", handlers.HandleDeleteClosedStock)
 		r.Delete("/api/history/option/{id}", handlers.HandleDeleteClosedOption)
+
+		// Import routes
+		r.Post("/api/import-csv", handlers.HandleImportCSV)
 	})
 
 	port := os.Getenv("PORT")

@@ -40,6 +40,14 @@
             <main class="main-content">
                 <div class="page-header">
                     <h2>Trading History</h2>
+                    <button
+                        class="btn btn-primary"
+                        hx-get="/modal/import-csv.html"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML"
+                    >
+                        Import CSV
+                    </button>
                 </div>
 
                 <div class="history-container">

@@ -54,7 +54,6 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Render HTML table wrapped in the container div
 	htmlContent := `<div id="closed-stocks-list" hx-get="/api/history/stocks" hx-trigger="historyUpdated from:body" hx-swap="outerHTML"><table class="history-table">
 		<thead>
 			<tr>
@@ -104,7 +103,6 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(htmlContent))
 }
 
-// HandleEditClosedStock shows edit modal for a closed stock position
 func HandleEditClosedStock(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -114,7 +112,6 @@ func HandleEditClosedStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the closed position details
 	var ticker, openDate, closeDate string
 	var quantity, costBasis, sellPrice, profitLoss float64
 
@@ -129,7 +126,6 @@ func HandleEditClosedStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return edit form modal
 	modalHTML := fmt.Sprintf(`
 		<div class="modal">
 			<div class="modal-content">
@@ -174,7 +170,6 @@ func HandleEditClosedStock(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(modalHTML))
 }
 
-// HandleUpdateClosedStock updates a closed stock position
 func HandleUpdateClosedStock(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -195,7 +190,6 @@ func HandleUpdateClosedStock(w http.ResponseWriter, r *http.Request) {
 	openDate := r.FormValue("openDate")
 	closeDate := r.FormValue("closeDate")
 
-	// Recalculate profit/loss
 	profitLoss := (sellPrice - costBasis) * quantity
 
 	_, err := db.Exec(`
@@ -209,12 +203,10 @@ func HandleUpdateClosedStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "historyUpdated")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
 
-// HandleDeleteClosedStock deletes a closed stock position
 func HandleDeleteClosedStock(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -230,12 +222,10 @@ func HandleDeleteClosedStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the updated list
 	w.Header().Set("HX-Trigger", "historyUpdated")
 	HandleGetClosedStocks(w, r)
 }
 
-// HandleEditClosedOption shows edit modal for a closed option position
 func HandleEditClosedOption(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -245,7 +235,6 @@ func HandleEditClosedOption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the closed position details
 	var ticker, expDate, purchaseDate, closeDate, optionType string
 	var price, premium, strike, collateral, sellPrice, profitLoss float64
 
@@ -260,7 +249,6 @@ func HandleEditClosedOption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return edit form modal
 	modalHTML := fmt.Sprintf(`
 		<div class="modal">
 			<div class="modal-content">
@@ -329,7 +317,6 @@ func HandleEditClosedOption(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(modalHTML))
 }
 
-// HandleUpdateClosedOption updates a closed option position
 func HandleUpdateClosedOption(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -354,14 +341,11 @@ func HandleUpdateClosedOption(w http.ResponseWriter, r *http.Request) {
 	purchaseDate := r.FormValue("purchaseDate")
 	closeDate := r.FormValue("closeDate")
 
-	// Recalculate profit/loss based on option type
 	var profitLoss float64
 	switch optionType {
 	case "call", "put":
-		// Buying options: P/L = Sell Price - Premium Paid
 		profitLoss = sellPrice - premium
 	case "csp", "cc":
-		// Selling options: P/L = Premium Collected - Buyback Price
 		profitLoss = premium - sellPrice
 	}
 
@@ -377,12 +361,10 @@ func HandleUpdateClosedOption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Close modal and trigger refresh
 	w.Header().Set("HX-Trigger", "historyUpdated")
 	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
 }
 
-// HandleDeleteClosedOption deletes a closed option position
 func HandleDeleteClosedOption(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 
@@ -398,7 +380,6 @@ func HandleDeleteClosedOption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the updated list
 	w.Header().Set("HX-Trigger", "historyUpdated")
 	HandleGetClosedOptions(w, r)
 }
@@ -442,7 +423,6 @@ func HandleGetClosedOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Render HTML table wrapped in the container div
 	htmlContent := `<div id="closed-options-list" hx-get="/api/history/options" hx-trigger="historyUpdated from:body" hx-swap="outerHTML"><table class="history-table">
 		<thead>
 			<tr>
