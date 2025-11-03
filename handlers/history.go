@@ -65,7 +65,6 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 				<th>Sell Price</th>
 				<th>P/L</th>
 				<th>P/L %</th>
-				<th>ROR %</th>
 				<th>Actions</th>
 			</tr>
 		</thead>
@@ -77,7 +76,6 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 			plClass = "negative"
 		}
 		plPercent := cs.PlPercent()
-		rorPercent := cs.CalculateROR() * 100
 
 		htmlContent += fmt.Sprintf(`
 			<tr>
@@ -89,13 +87,12 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 				<td>$%.2f</td>
 				<td class="%s">$%.2f</td>
 				<td class="%s">%.2f%%</td>
-				<td class="%s">%.2f%%</td>
 				<td>
 					<button class="btn btn-sm btn-primary" hx-get="/api/history/edit-stock/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
 					<button class="btn btn-sm btn-danger" hx-delete="/api/history/stock/%d" hx-target="#closed-stocks-list" hx-swap="outerHTML" hx-confirm="Delete this closed position?">Delete</button>
 				</td>
 			</tr>`, html.EscapeString(cs.Ticker), FormatDate(cs.OpenDate), FormatDate(cs.CloseDate), cs.Quantity,
-			cs.CostBasis, cs.SellPrice, plClass, cs.ProfitLoss, plClass, plPercent, plClass, rorPercent, cs.ID, cs.ID)
+			cs.CostBasis, cs.SellPrice, plClass, cs.ProfitLoss, plClass, plPercent, cs.ID, cs.ID)
 	}
 
 	htmlContent += `</tbody></table></div>`

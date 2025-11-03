@@ -37,64 +37,53 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// Auth routes (no middleware)
 	router.Get("/login", handlers.HandleLogin)
 	router.Post("/api/auth/login", handlers.HandleLoginPost)
 	router.Get("/signup", handlers.HandleSignup)
 	router.Post("/api/auth/signup", handlers.HandleSignupPost)
 	router.Post("/api/logout", handlers.HandleLogout)
 
-	// Protected routes group
 	router.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth)
 
-		// Page routes
 		r.Get("/", handlers.HandleHome)
 		r.Get("/positions.html", handlers.HandlePositions)
 		r.Get("/history.html", handlers.HandleHistory)
 
-		// Modal routes
 		r.Get("/modal/add-position.html", handlers.HandleModalAddPosition)
 		r.Get("/modal/add-position-fields.html", handlers.HandleModalAddPositionFields)
 		r.Get("/modal/import-csv.html", handlers.HandleModalImportCSV)
 		r.Get("/modal/close", handlers.HandleModalClose)
 
-		// API routes
 		r.Get("/api/stats", handlers.HandleStats)
 		r.Post("/api/positions/add", handlers.HandleAddPosition)
 		r.Get("/api/positions/stocks", handlers.HandleGetStockPositions)
 		r.Get("/api/positions/options", handlers.HandleGetOptionPositions)
 
-		// Edit routes
 		r.Get("/api/positions/edit-stock/{id}", handlers.HandleEditStockPosition)
 		r.Post("/api/positions/update-stock/{id}", handlers.HandleUpdateStockPosition)
 		r.Get("/api/positions/edit-option/{id}", handlers.HandleEditOptionPosition)
 		r.Post("/api/positions/update-option/{id}", handlers.HandleUpdateOptionPosition)
 
-		// Delete routes
 		r.Delete("/api/positions/stock/{id}", handlers.HandleDeleteStockPosition)
 		r.Delete("/api/positions/option/{id}", handlers.HandleDeleteOptionPosition)
 
-		// Close routes
 		r.Post("/api/positions/close/{id}", handlers.HandleClosePosition)
+		r.Post("/api/positions/close-option-modal/{id}", handlers.HandleCloseOptionModal)
 		r.Post("/api/positions/close-stock/{id}", handlers.HandleCloseStockPosition)
 		r.Post("/api/positions/close-option/{id}", handlers.HandleCloseOptionPosition)
 
-		// History routes
 		r.Get("/api/history/stocks", handlers.HandleGetClosedStocks)
 		r.Get("/api/history/options", handlers.HandleGetClosedOptions)
 
-		// History edit routes
 		r.Get("/api/history/edit-stock/{id}", handlers.HandleEditClosedStock)
 		r.Post("/api/history/update-stock/{id}", handlers.HandleUpdateClosedStock)
 		r.Get("/api/history/edit-option/{id}", handlers.HandleEditClosedOption)
 		r.Post("/api/history/update-option/{id}", handlers.HandleUpdateClosedOption)
 
-		// History delete routes
 		r.Delete("/api/history/stock/{id}", handlers.HandleDeleteClosedStock)
 		r.Delete("/api/history/option/{id}", handlers.HandleDeleteClosedOption)
 
-		// Import routes
 		r.Post("/api/import-csv", handlers.HandleImportCSV)
 	})
 

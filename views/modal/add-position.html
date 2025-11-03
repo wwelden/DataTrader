@@ -27,7 +27,7 @@
                     hx-get="/modal/add-position-fields.html"
                     hx-target="#conditional-fields"
                     hx-swap="innerHTML"
-                    hx-trigger="change"
+                    hx-trigger="load, change"
                 >
                     <option value="stock">Stock</option>
                     <option value="option">Option</option>
@@ -42,40 +42,18 @@
                     name="ticker"
                     required
                     placeholder="e.g., AAPL"
+                    style="text-transform: uppercase"
+                    oninput="this.value = this.value.toUpperCase()"
                 />
-            </div>
-
-            <div class="form-group">
-                <label>Quantity</label>
-                <input
-                    type="number"
-                    id="quantity"
-                    name="quantity"
-                    required
-                    step="0.01"
-                    placeholder="100"
-                />
-            </div>
-
-            <div class="form-group">
-                <label>Cost Basis / Price</label>
-                <input
-                    type="number"
-                    id="costBasis"
-                    name="costBasis"
-                    required
-                    step="0.01"
-                    placeholder="150.00"
-                />
-            </div>
-
-            <div class="form-group">
-                <label>Open Date</label>
-                <input type="date" id="openDate" name="openDate" required />
             </div>
 
             <div id="conditional-fields">
                 <!-- Stock or Option specific fields loaded here -->
+            </div>
+
+            <div class="form-group">
+                <label>Open Date</label>
+                <input type="date" id="openDate" name="openDate" />
             </div>
 
             <div class="form-actions">
@@ -95,3 +73,4 @@
         </form>
     </div>
 </div>
+"" """"
