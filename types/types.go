@@ -22,7 +22,7 @@ type StockTrade struct {
 	Date     string    `json:"date"`
 	Code     TradeCode `json:"code"`
 	Price    float64   `json:"price"`
-	Amount   float64   `json:"amount"` // Price * Quantity
+	Amount   float64   `json:"amount"`
 	Quantity float64   `json:"quantity"`
 }
 type OptionTrade struct {
@@ -31,14 +31,13 @@ type OptionTrade struct {
 	Date     string    `json:"date"`
 	Code     TradeCode `json:"code"`
 	Price    float64   `json:"price"`
-	Amount   float64   `json:"amount"` // Price * Quantity
+	Amount   float64   `json:"amount"`
 	Quantity float64   `json:"quantity"`
 
-	// Option-specific fields (zero values for stock trades)
-	Strike     float64    `json:"strike"`      // Strike price for options
-	ExpDate    string     `json:"exp_date"`    // Expiration date for options
-	OptionType OptionType `json:"option_type"` // Call, Put, CSP, CC
-	Premium    float64    `json:"premium"`     // Premium paid/received
+	Strike     float64    `json:"strike"`
+	ExpDate    string     `json:"exp_date"`
+	OptionType OptionType `json:"option_type"`
+	Premium    float64    `json:"premium"`
 }
 
 type StockPos struct {

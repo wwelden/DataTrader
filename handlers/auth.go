@@ -13,7 +13,6 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	components.LoginPage("").Render(r.Context(), w)
 }
 
-// HandleLoginPost processes login form submission
 func HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -45,25 +44,22 @@ func HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create session
 	sessionToken, err := middleware.CreateSession(userID)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    sessionToken,
 		Path:     "/",
-		MaxAge:   60 * 60 * 24 * 7, // 7 days
+		MaxAge:   60 * 60 * 24 * 7,
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Redirect to home page
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -71,7 +67,6 @@ func HandleSignup(w http.ResponseWriter, r *http.Request) {
 	components.SignupPage("").Render(r.Context(), w)
 }
 
-// HandleSignupPost processes signup form submission
 func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -97,7 +92,6 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if username already exists
 	var exists int
 	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", username).Scan(&exists)
 	if err != nil {
@@ -110,14 +104,12 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Create user
 	result, err := db.Exec("INSERT INTO users (username, password) VALUES (?, ?)", username, string(hashedPassword))
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -130,38 +122,31 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create session
 	sessionToken, err := middleware.CreateSession(int(userID))
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    sessionToken,
 		Path:     "/",
-		MaxAge:   60 * 60 * 24 * 7, // 7 days
+		MaxAge:   60 * 60 * 24 * 7,
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Redirect to home page
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// HandleLogout clears the session and redirects to login
 func HandleLogout(w http.ResponseWriter, r *http.Request) {
-	// Get session token from cookie
 	cookie, err := r.Cookie("session_token")
 	if err == nil {
-		// Delete session from store
 		middleware.DeleteSession(cookie.Value)
 	}
 
-	// Clear session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    "",
@@ -170,7 +155,6 @@ func HandleLogout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	})
 
-	// Redirect to login page
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 

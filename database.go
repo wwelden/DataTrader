@@ -10,7 +10,6 @@ import (
 var db *sql.DB
 
 const schemaSQL = `
--- Users table
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -20,7 +19,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Stock trades table
 CREATE TABLE IF NOT EXISTS stock_trades (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -34,7 +32,6 @@ CREATE TABLE IF NOT EXISTS stock_trades (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Option trades table
 CREATE TABLE IF NOT EXISTS option_trades (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -52,7 +49,6 @@ CREATE TABLE IF NOT EXISTS option_trades (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Stock positions table
 CREATE TABLE IF NOT EXISTS stock_positions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -66,7 +62,6 @@ CREATE TABLE IF NOT EXISTS stock_positions (
     UNIQUE(user_id, ticker, open_date)
 );
 
--- Closed stocks table
 CREATE TABLE IF NOT EXISTS closed_stocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -81,7 +76,6 @@ CREATE TABLE IF NOT EXISTS closed_stocks (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Option positions table
 CREATE TABLE IF NOT EXISTS option_positions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -99,7 +93,6 @@ CREATE TABLE IF NOT EXISTS option_positions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Closed options table
 CREATE TABLE IF NOT EXISTS closed_options (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -119,7 +112,6 @@ CREATE TABLE IF NOT EXISTS closed_options (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_stock_trades_user_id ON stock_trades(user_id);
 CREATE INDEX IF NOT EXISTS idx_stock_trades_ticker ON stock_trades(ticker);
 CREATE INDEX IF NOT EXISTS idx_option_trades_user_id ON option_trades(user_id);
@@ -142,28 +134,23 @@ func InitDB() {
 		log.Fatal("Failed to execute database schema:", err)
 	}
 
-	// Run migrations
 	runMigrations()
 
 	log.Println("Database initialized successfully")
 }
 
 func runMigrations() {
-	// Add quantity column to option_positions if it doesn't exist
 	_, err := db.Exec(`
 		ALTER TABLE option_positions ADD COLUMN quantity REAL NOT NULL DEFAULT 1
 	`)
 	if err != nil {
-		// Column might already exist, ignore error
 		log.Println("Migration note: quantity column may already exist in option_positions")
 	}
 
-	// Add quantity column to closed_options if it doesn't exist
 	_, err = db.Exec(`
 		ALTER TABLE closed_options ADD COLUMN quantity REAL NOT NULL DEFAULT 1
 	`)
 	if err != nil {
-		// Column might already exist, ignore error
 		log.Println("Migration note: quantity column may already exist in closed_options")
 	}
 }

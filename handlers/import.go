@@ -61,7 +61,6 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 	optionCount := 0
 
 	for _, trade := range trades.StockTrades {
-		// Normalize date to MM/DD/YY format
 		normalizedDate := NormalizeDateToMMDDYY(trade.Date)
 
 		var existingID int
@@ -113,12 +112,10 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, trade := range trades.OptionTrades {
-		// Normalize dates to MM/DD/YY format
 		normalizedDate := NormalizeDateToMMDDYY(trade.Date)
 		normalizedExpDate := NormalizeDateToMMDDYY(trade.ExpDate)
 		switch trade.Code {
 		case "BTO", "STO":
-			// Opening a new option position
 			_, err = db.Exec(`
 				INSERT INTO option_positions (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -128,7 +125,6 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "STC", "BTC":
-			// Closing an option position - find matching open position
 			var positionID int
 			var positionQuantity float64
 			var purchaseDate, positionType string
@@ -144,36 +140,27 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 				&positionID, &positionQuantity, &premium, &collateral, &purchaseDate, &positionType)
 
 			if err == nil {
-				// Found matching position - close it
 				quantityToClose := trade.Quantity
 				if quantityToClose > positionQuantity {
 					quantityToClose = positionQuantity // Can't close more than we have
 				}
 
-				// Calculate profit/loss
 				var profitLoss float64
 				sellPrice := trade.Price
 
-				// For STO (sold to open), closing means buying back (BTC)
-				// For BTO (bought to open), closing means selling (STC)
 				if trade.Code == "STC" {
-					// Selling to close a long position (Call/Put bought)
 					profitLoss = (sellPrice - premium) * quantityToClose
 				} else { // BTC
-					// Buying to close a short position (CSP/CC sold)
 					profitLoss = (premium - sellPrice) * quantityToClose
 				}
 
-				// Calculate proportional collateral
 				collateralForClosed := (collateral / positionQuantity) * quantityToClose
 
-				// Insert into closed_options
 				_, err = db.Exec(`
 					INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date, close_date, sell_price, profit_loss)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, userID, trade.Ticker, trade.Price, premium, trade.Strike, normalizedExpDate, positionType, collateralForClosed, quantityToClose, purchaseDate, normalizedDate, sellPrice, profitLoss)
 
-				// Update or delete the position
 				remainingQuantity := positionQuantity - quantityToClose
 				if remainingQuantity > 0 {
 					remainingCollateral := collateral - collateralForClosed

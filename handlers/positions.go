@@ -101,7 +101,6 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 		premium, _ := strconv.ParseFloat(r.FormValue("premium"), 64)
 		expDate := r.FormValue("expDate")
 
-		// For options, price = premium (the cost per share of the option)
 		price := premium
 		collateral := 0.0
 
@@ -236,7 +235,6 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get filter parameters
 	search := strings.ToUpper(r.URL.Query().Get("search"))
 	optionType := r.URL.Query().Get("type")
 	dateFromInput := r.URL.Query().Get("dateFrom")
@@ -244,9 +242,7 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 
 	var stockPositions []types.StockPos
 
-	// Only fetch stocks if no option type filter is selected
 	if optionType == "" {
-		// Build stock query
 		stockQuery := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
 		stockArgs := []interface{}{userID}
 
@@ -256,7 +252,6 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 		}
 		stockQuery += ` ORDER BY open_date DESC`
 
-		// Fetch stock positions
 		stockRows, err := db.Query(stockQuery, stockArgs...)
 		if err != nil {
 			http.Error(w, "Failed to fetch stock positions", http.StatusInternalServerError)
@@ -269,14 +264,12 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 			if err := stockRows.Scan(&pos.ID, &pos.Ticker, &pos.Quantity, &pos.CostBasis, &pos.OpenDate); err != nil {
 				continue
 			}
-			// Apply date filtering
 			if IsDateInRange(pos.OpenDate, dateFromInput, dateToInput) {
 				stockPositions = append(stockPositions, pos)
 			}
 		}
 	}
 
-	// Build option query
 	optionQuery := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
 	optionArgs := []interface{}{userID}
 
@@ -290,7 +283,6 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 	}
 	optionQuery += ` ORDER BY purchase_date DESC`
 
-	// Fetch option positions
 	optionRows, err := db.Query(optionQuery, optionArgs...)
 	if err != nil {
 		http.Error(w, "Failed to fetch option positions", http.StatusInternalServerError)
@@ -304,13 +296,11 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 		if err := optionRows.Scan(&pos.ID, &pos.Ticker, &pos.Price, &pos.Premium, &pos.Strike, &pos.ExpDate, &pos.Type, &pos.Collateral, &pos.Quantity, &pos.PurchaseDate); err != nil {
 			continue
 		}
-		// Apply date filtering
 		if IsDateInRange(pos.PurchaseDate, dateFromInput, dateToInput) {
 			optionPositions = append(optionPositions, pos)
 		}
 	}
 
-	// Build HTML response
 	htmlContent := `<div class="positions-section">
 		<h3>Stock Positions</h3>
 		<div id="stock-positions-list" hx-get="/api/positions/stocks" hx-trigger="positionAdded from:body, positionClosed from:body" hx-swap="innerHTML">`
@@ -471,7 +461,6 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		var html string
 
-		// For CC and CSP, show outcome selector
 		if optionType == types.CC || optionType == types.CSP {
 			outcomeOptions := ""
 			if optionType == types.CC {
@@ -528,7 +517,6 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 				</script>
 			`, ticker, optionType, positionID, outcomeOptions, optionType, strike, expDate, premium)
 		} else {
-			// For regular Call/Put, show simple close form
 			html = fmt.Sprintf(`
 				<div class="modal">
 					<div class="modal-content">
@@ -597,7 +585,6 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 
 	var html string
 
-	// For CC and CSP, show outcome selector
 	if optionType == types.CC || optionType == types.CSP {
 		outcomeOptions := ""
 		if optionType == types.CC {
@@ -658,7 +645,6 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 			</script>
 		`, ticker, optionType, positionID, quantity, quantity, quantity, quantity, outcomeOptions, optionType, strike, expDate, premium)
 	} else {
-		// For regular Call/Put, show simple close form
 		html = fmt.Sprintf(`
 			<div class="modal">
 				<div class="modal-content">
@@ -731,7 +717,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate quantity to close
 	if quantityToClose <= 0 || quantityToClose > currentQuantity {
 		http.Error(w, "Invalid quantity to close", http.StatusBadRequest)
 		return
@@ -775,7 +760,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Update or delete the position based on remaining quantity
 	remainingQuantity := currentQuantity - quantityToClose
 	if remainingQuantity > 0 {
 		_, err = db.Exec(`
@@ -835,24 +819,19 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate quantity to close
 	if quantityToClose <= 0 || quantityToClose > currentQuantity {
 		http.Error(w, "Invalid quantity to close", http.StatusBadRequest)
 		return
 	}
 
-	// Handle different outcomes
 	switch outcome {
 	case "expired":
-		// Expired: close at $0 on expiration date
 		sellPrice = 0
 		closeDate = expDate
 
 	case "called_away":
-		// Called Away (CC): Sell shares at sharePrice, close option at $0
 		sellPrice = 0
 
-		// Remove 100 shares per contract from stock position
 		sharesToSell := quantityToClose * 100
 		var stockID int
 		var stockQuantity, stockCostBasis float64
@@ -864,7 +843,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		`, userID, ticker).Scan(&stockID, &stockQuantity, &stockCostBasis, &stockOpenDate)
 
 		if err == nil && stockQuantity >= sharesToSell {
-			// Close shares at the sharePrice
 			stockProfitLoss := (sharePrice - stockCostBasis) * sharesToSell
 
 			_, err = db.Exec(`
@@ -877,7 +855,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Update stock position quantity
 			newQuantity := stockQuantity - sharesToSell
 			if newQuantity > 0 {
 				_, err = db.Exec(`
@@ -896,13 +873,10 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "assigned":
-		// Assigned (CSP): Add 100 shares per contract at strike price, close option at $0
 		sellPrice = 0
 
-		// Add 100 shares per contract
 		sharesToAdd := quantityToClose * 100
 
-		// Check if user already has shares of this stock
 		var existingID int
 		var existingQuantity, existingCostBasis float64
 		err := db.QueryRow(`
@@ -912,7 +886,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		`, userID, ticker).Scan(&existingID, &existingQuantity, &existingCostBasis)
 
 		if err == nil {
-			// Update existing position
 			totalQuantity := existingQuantity + sharesToAdd
 			totalCost := (existingCostBasis * existingQuantity) + (strike * sharesToAdd)
 			newCostBasis := totalCost / totalQuantity
@@ -923,7 +896,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 				WHERE id = ?
 			`, totalQuantity, newCostBasis, existingID)
 		} else {
-			// Create new stock position
 			_, err = db.Exec(`
 				INSERT INTO stock_positions (user_id, ticker, quantity, cost_basis, open_date)
 				VALUES (?, ?, ?, ?, ?)
@@ -936,11 +908,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "closed":
-		// Closed normally: use the sellPrice provided
-		// sellPrice already set from form
 	}
 
-	// Calculate profit/loss per contract
 	var profitLoss float64
 	switch optionType {
 	case types.Call, types.Put:
@@ -949,10 +918,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		profitLoss = (premium - sellPrice) * quantityToClose
 	}
 
-	// Calculate collateral for the quantity being closed
 	collateralForClosed := (collateral / currentQuantity) * quantityToClose
 
-	// Insert into closed_options
 	_, err = db.Exec(`
 		INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date, close_date, sell_price, profit_loss)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -963,10 +930,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update or delete the position based on remaining quantity
 	remainingQuantity := currentQuantity - quantityToClose
 	if remainingQuantity > 0 {
-		// Partial close - update the position
 		remainingCollateral := collateral - collateralForClosed
 		_, err = db.Exec(`
 			UPDATE option_positions
@@ -974,7 +939,6 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 			WHERE id = ?
 		`, remainingQuantity, remainingCollateral, positionID)
 	} else {
-		// Full close - delete the position
 		_, err = db.Exec(`DELETE FROM option_positions WHERE id = ?`, positionID)
 	}
 
