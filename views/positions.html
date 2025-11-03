@@ -48,7 +48,60 @@
                     </button>
                 </div>
 
-                <div class="positions-container">
+                <form class="filters-container" id="positions-filter-form">
+                    <div class="filter-group">
+                        <input
+                            type="text"
+                            name="search"
+                            placeholder="Search by ticker..."
+                            style="text-transform: uppercase"
+                        />
+                    </div>
+                    <div class="filter-group">
+                        <select name="type">
+                            <option value="">All Types</option>
+                            <option value="Call">Call</option>
+                            <option value="Put">Put</option>
+                            <option value="CSP">CSP</option>
+                            <option value="CC">CC</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <input
+                            type="date"
+                            name="dateFrom"
+                            placeholder="From Date"
+                        />
+                    </div>
+                    <div class="filter-group">
+                        <input
+                            type="date"
+                            name="dateTo"
+                            placeholder="To Date"
+                        />
+                    </div>
+                    <div class="filter-group">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            hx-get="/api/positions/filter"
+                            hx-include="[name='search'], [name='type'], [name='dateFrom'], [name='dateTo']"
+                            hx-target="#positions-container"
+                        >
+                            Apply Filters
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            hx-get="/api/positions/filter"
+                            hx-target="#positions-container"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </form>
+
+                <div class="positions-container" id="positions-container">
                     <div class="positions-section">
                         <h3>Stock Positions</h3>
                         <div
@@ -77,5 +130,12 @@
         </div>
 
         <div id="modal-container"></div>
+        <script>
+            document
+                .querySelector('[name="search"]')
+                .addEventListener("input", function (e) {
+                    e.target.value = e.target.value.toUpperCase();
+                });
+        </script>
     </body>
 </html>

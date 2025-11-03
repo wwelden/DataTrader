@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS option_positions (
     exp_date TEXT NOT NULL,
     type TEXT NOT NULL,
     collateral REAL NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
     purchase_date TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -109,6 +110,7 @@ CREATE TABLE IF NOT EXISTS closed_options (
     exp_date TEXT NOT NULL,
     type TEXT NOT NULL,
     collateral REAL NOT NULL,
+    quantity REAL NOT NULL DEFAULT 1,
     purchase_date TEXT NOT NULL,
     close_date TEXT NOT NULL,
     sell_price REAL NOT NULL,
@@ -140,7 +142,30 @@ func InitDB() {
 		log.Fatal("Failed to execute database schema:", err)
 	}
 
+	// Run migrations
+	runMigrations()
+
 	log.Println("Database initialized successfully")
+}
+
+func runMigrations() {
+	// Add quantity column to option_positions if it doesn't exist
+	_, err := db.Exec(`
+		ALTER TABLE option_positions ADD COLUMN quantity REAL NOT NULL DEFAULT 1
+	`)
+	if err != nil {
+		// Column might already exist, ignore error
+		log.Println("Migration note: quantity column may already exist in option_positions")
+	}
+
+	// Add quantity column to closed_options if it doesn't exist
+	_, err = db.Exec(`
+		ALTER TABLE closed_options ADD COLUMN quantity REAL NOT NULL DEFAULT 1
+	`)
+	if err != nil {
+		// Column might already exist, ignore error
+		log.Println("Migration note: quantity column may already exist in closed_options")
+	}
 }
 
 func GetDB() *sql.DB {

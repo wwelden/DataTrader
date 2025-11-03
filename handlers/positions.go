@@ -122,9 +122,9 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 		}
 
 		_, err := db.Exec(`
-			INSERT INTO option_positions (user_id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`, userID, ticker, price, premium, strike, expDate, optionType, collateral, openDate)
+			INSERT INTO option_positions (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, userID, ticker, price, premium, strike, expDate, optionType, collateral, quantity, openDate)
 
 		if err != nil {
 			http.Error(w, "Failed to add option position: "+err.Error(), http.StatusInternalServerError)
@@ -143,12 +143,23 @@ func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(`
-		SELECT id, ticker, quantity, cost_basis, open_date
-		FROM stock_positions
-		WHERE user_id = ?
-		ORDER BY open_date DESC
-	`, userID)
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	// Build query with filters
+	query := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
+	args := []interface{}{userID}
+
+	if search != "" {
+		query += ` AND ticker LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+
+	query += ` ORDER BY open_date DESC`
+
+	rows, err := db.Query(query, args...)
 
 	if err != nil {
 		http.Error(w, "Failed to fetch stock positions", http.StatusInternalServerError)
@@ -162,7 +173,10 @@ func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&pos.ID, &pos.Ticker, &pos.Quantity, &pos.CostBasis, &pos.OpenDate); err != nil {
 			continue
 		}
-		positions = append(positions, pos)
+		// Apply date filtering
+		if IsDateInRange(pos.OpenDate, dateFromInput, dateToInput) {
+			positions = append(positions, pos)
+		}
 	}
 
 	if len(positions) == 0 {
@@ -210,12 +224,28 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(`
-		SELECT id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date
-		FROM option_positions
-		WHERE user_id = ?
-		ORDER BY purchase_date DESC
-	`, userID)
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	optionType := r.URL.Query().Get("type")
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	// Build query with filters
+	query := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
+	args := []interface{}{userID}
+
+	if search != "" {
+		query += ` AND ticker LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+	if optionType != "" {
+		query += ` AND type = ?`
+		args = append(args, optionType)
+	}
+
+	query += ` ORDER BY purchase_date DESC`
+
+	rows, err := db.Query(query, args...)
 
 	if err != nil {
 		http.Error(w, "Failed to fetch option positions", http.StatusInternalServerError)
@@ -226,10 +256,13 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 	var positions []types.OptionPos
 	for rows.Next() {
 		var pos types.OptionPos
-		if err := rows.Scan(&pos.ID, &pos.Ticker, &pos.Price, &pos.Premium, &pos.Strike, &pos.ExpDate, &pos.Type, &pos.Collateral, &pos.PurchaseDate); err != nil {
+		if err := rows.Scan(&pos.ID, &pos.Ticker, &pos.Price, &pos.Premium, &pos.Strike, &pos.ExpDate, &pos.Type, &pos.Collateral, &pos.Quantity, &pos.PurchaseDate); err != nil {
 			continue
 		}
-		positions = append(positions, pos)
+		// Apply date filtering
+		if IsDateInRange(pos.PurchaseDate, dateFromInput, dateToInput) {
+			positions = append(positions, pos)
+		}
 	}
 
 	if len(positions) == 0 {
@@ -243,6 +276,7 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 			<tr>
 				<th>Ticker</th>
 				<th>Type</th>
+				<th>Contracts</th>
 				<th>Strike</th>
 				<th>Premium</th>
 				<th>Exp Date</th>
@@ -257,6 +291,7 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 			<tr>
 				<td>%s</td>
 				<td>%s</td>
+				<td>%.0f</td>
 				<td>$%.2f</td>
 				<td>$%.2f</td>
 				<td>%s</td>
@@ -266,10 +301,179 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 					<button class="btn btn-sm btn-danger" hx-delete="/api/positions/option/%d" hx-target="#option-positions-list" hx-swap="outerHTML" hx-confirm="Delete this position?">Delete</button>
 					<button class="btn btn-sm btn-warning" hx-post="/api/positions/close-option-modal/%d" hx-target="#modal-container" hx-swap="innerHTML">Close</button>
 				</td>
-			</tr>`, html.EscapeString(pos.Ticker), pos.Type, pos.Strike, pos.Premium, FormatDate(pos.ExpDate), FormatDate(pos.PurchaseDate), pos.ID, pos.ID, pos.ID)
+			</tr>`, html.EscapeString(pos.Ticker), pos.Type, pos.Quantity, pos.Strike, pos.Premium, FormatDate(pos.ExpDate), FormatDate(pos.PurchaseDate), pos.ID, pos.ID, pos.ID)
 	}
 
 	htmlContent += `</tbody></table></div>`
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(htmlContent))
+}
+
+func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetOrCreateUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	optionType := r.URL.Query().Get("type")
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	var stockPositions []types.StockPos
+
+	// Only fetch stocks if no option type filter is selected
+	if optionType == "" {
+		// Build stock query
+		stockQuery := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
+		stockArgs := []interface{}{userID}
+
+		if search != "" {
+			stockQuery += ` AND ticker LIKE ?`
+			stockArgs = append(stockArgs, "%"+search+"%")
+		}
+		stockQuery += ` ORDER BY open_date DESC`
+
+		// Fetch stock positions
+		stockRows, err := db.Query(stockQuery, stockArgs...)
+		if err != nil {
+			http.Error(w, "Failed to fetch stock positions", http.StatusInternalServerError)
+			return
+		}
+		defer stockRows.Close()
+
+		for stockRows.Next() {
+			var pos types.StockPos
+			if err := stockRows.Scan(&pos.ID, &pos.Ticker, &pos.Quantity, &pos.CostBasis, &pos.OpenDate); err != nil {
+				continue
+			}
+			// Apply date filtering
+			if IsDateInRange(pos.OpenDate, dateFromInput, dateToInput) {
+				stockPositions = append(stockPositions, pos)
+			}
+		}
+	}
+
+	// Build option query
+	optionQuery := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
+	optionArgs := []interface{}{userID}
+
+	if search != "" {
+		optionQuery += ` AND ticker LIKE ?`
+		optionArgs = append(optionArgs, "%"+search+"%")
+	}
+	if optionType != "" {
+		optionQuery += ` AND type = ?`
+		optionArgs = append(optionArgs, optionType)
+	}
+	optionQuery += ` ORDER BY purchase_date DESC`
+
+	// Fetch option positions
+	optionRows, err := db.Query(optionQuery, optionArgs...)
+	if err != nil {
+		http.Error(w, "Failed to fetch option positions", http.StatusInternalServerError)
+		return
+	}
+	defer optionRows.Close()
+
+	var optionPositions []types.OptionPos
+	for optionRows.Next() {
+		var pos types.OptionPos
+		if err := optionRows.Scan(&pos.ID, &pos.Ticker, &pos.Price, &pos.Premium, &pos.Strike, &pos.ExpDate, &pos.Type, &pos.Collateral, &pos.Quantity, &pos.PurchaseDate); err != nil {
+			continue
+		}
+		// Apply date filtering
+		if IsDateInRange(pos.PurchaseDate, dateFromInput, dateToInput) {
+			optionPositions = append(optionPositions, pos)
+		}
+	}
+
+	// Build HTML response
+	htmlContent := `<div class="positions-section">
+		<h3>Stock Positions</h3>
+		<div id="stock-positions-list" hx-get="/api/positions/stocks" hx-trigger="positionAdded from:body, positionClosed from:body" hx-swap="innerHTML">`
+
+	if len(stockPositions) == 0 {
+		htmlContent += `<p>No stock positions found.</p>`
+	} else {
+		htmlContent += `<table class="positions-table">
+			<thead>
+				<tr>
+					<th>Ticker</th>
+					<th>Quantity</th>
+					<th>Cost Basis</th>
+					<th>Open Date</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>`
+
+		for _, pos := range stockPositions {
+			htmlContent += fmt.Sprintf(`
+				<tr>
+					<td>%s</td>
+					<td>%.2f</td>
+					<td>$%.2f</td>
+					<td>%s</td>
+					<td>
+						<button class="btn btn-sm btn-primary" hx-get="/api/positions/edit/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
+						<button class="btn btn-sm btn-danger" hx-delete="/api/positions/%d" hx-target="#stock-positions-list" hx-swap="outerHTML" hx-confirm="Delete this position?">Delete</button>
+						<button class="btn btn-sm btn-warning" hx-post="/api/positions/close/%d" hx-target="#modal-container" hx-swap="innerHTML">Close</button>
+					</td>
+				</tr>`, html.EscapeString(pos.Ticker), pos.Quantity, pos.CostBasis, FormatDate(pos.OpenDate), pos.ID, pos.ID, pos.ID)
+		}
+
+		htmlContent += `</tbody></table>`
+	}
+
+	htmlContent += `</div></div>
+	<div class="positions-section">
+		<h3>Option Positions</h3>
+		<div id="option-positions-list" hx-get="/api/positions/options" hx-trigger="positionAdded from:body, positionClosed from:body" hx-swap="innerHTML">`
+
+	if len(optionPositions) == 0 {
+		htmlContent += `<p>No option positions found.</p>`
+	} else {
+		htmlContent += `<table class="positions-table">
+			<thead>
+				<tr>
+					<th>Ticker</th>
+					<th>Type</th>
+					<th>Contracts</th>
+					<th>Strike</th>
+					<th>Premium</th>
+					<th>Exp Date</th>
+					<th>Purchase Date</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>`
+
+		for _, pos := range optionPositions {
+			htmlContent += fmt.Sprintf(`
+				<tr>
+					<td>%s</td>
+					<td>%s</td>
+					<td>%.0f</td>
+					<td>$%.2f</td>
+					<td>$%.2f</td>
+					<td>%s</td>
+					<td>%s</td>
+					<td>
+						<button class="btn btn-sm btn-primary" hx-get="/api/positions/edit-option/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
+						<button class="btn btn-sm btn-danger" hx-delete="/api/positions/option/%d" hx-target="#option-positions-list" hx-swap="outerHTML" hx-confirm="Delete this position?">Delete</button>
+						<button class="btn btn-sm btn-warning" hx-post="/api/positions/close-option-modal/%d" hx-target="#modal-container" hx-swap="innerHTML">Close</button>
+					</td>
+				</tr>`, html.EscapeString(pos.Ticker), pos.Type, pos.Quantity, pos.Strike, pos.Premium, FormatDate(pos.ExpDate), FormatDate(pos.PurchaseDate), pos.ID, pos.ID, pos.ID)
+		}
+
+		htmlContent += `</tbody></table>`
+	}
+
+	htmlContent += `</div></div>`
+
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(htmlContent))
 }
@@ -307,6 +511,10 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 					</div>
 					<form hx-post="/api/positions/close-stock/%s" hx-target="#modal-container" hx-swap="innerHTML">
 						<div class="form-group">
+							<label>Quantity to Close (Available: %.2f)</label>
+							<input type="number" name="quantity" step="0.01" required placeholder="%.2f" value="%.2f" max="%.2f" />
+						</div>
+						<div class="form-group">
 							<label>Sell Price</label>
 							<input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" />
 						</div>
@@ -321,7 +529,7 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 					</form>
 				</div>
 			</div>
-		`, ticker, positionID, costBasis)
+		`, ticker, positionID, quantity, quantity, quantity, quantity, costBasis)
 
 		w.Header().Set("Content-Type", "text/html")
 		w.Header().Set("HX-Retarget", "#modal-container")
@@ -452,15 +660,15 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ticker string
-	var price, premium, strike, collateral float64
+	var price, premium, strike, collateral, quantity float64
 	var expDate, purchaseDate string
 	var optionType types.OptionType
 
 	err := db.QueryRow(`
-		SELECT ticker, price, premium, strike, exp_date, type, collateral, purchase_date
+		SELECT ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date
 		FROM option_positions
 		WHERE id = ? AND user_id = ?
-	`, positionID, userID).Scan(&ticker, &price, &premium, &strike, &expDate, &optionType, &collateral, &purchaseDate)
+	`, positionID, userID).Scan(&ticker, &price, &premium, &strike, &expDate, &optionType, &collateral, &quantity, &purchaseDate)
 
 	if err != nil {
 		http.Error(w, "Position not found", http.StatusNotFound)
@@ -491,6 +699,10 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 						<h3>Close Option Position: %s %s</h3>
 					</div>
 					<form hx-post="/api/positions/close-option/%s" hx-target="#modal-container" hx-swap="innerHTML">
+						<div class="form-group">
+							<label>Contracts to Close (Available: %.0f)</label>
+							<input type="number" name="quantity" step="1" required placeholder="%.0f" value="%.0f" max="%.0f" min="1" />
+						</div>
 						<div class="form-group">
 							<label>Outcome</label>
 							<select id="outcome" name="outcome" required onchange="toggleOutcomeFields(this.value)">
@@ -524,7 +736,7 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			</script>
-		`, ticker, optionType, positionID, outcomeOptions, optionType, strike, expDate, premium)
+		`, ticker, optionType, positionID, quantity, quantity, quantity, quantity, outcomeOptions, optionType, strike, expDate, premium)
 	} else {
 		// For regular Call/Put, show simple close form
 		html = fmt.Sprintf(`
@@ -535,6 +747,10 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 					</div>
 					<form hx-post="/api/positions/close-option/%s" hx-target="#modal-container" hx-swap="innerHTML">
 						<input type="hidden" name="outcome" value="closed">
+						<div class="form-group">
+							<label>Contracts to Close (Available: %.0f)</label>
+							<input type="number" name="quantity" step="1" required placeholder="%.0f" value="%.0f" max="%.0f" min="1" />
+						</div>
 						<div class="form-group">
 							<label>Sell Price</label>
 							<input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" />
@@ -550,7 +766,7 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 					</form>
 				</div>
 			</div>
-		`, ticker, optionType, positionID, premium)
+		`, ticker, optionType, positionID, quantity, quantity, quantity, quantity, premium)
 	}
 
 	w.Header().Set("Content-Type", "text/html")
@@ -567,6 +783,7 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 
 	positionID := chi.URLParam(r, "id")
 
+	quantityToClose, _ := strconv.ParseFloat(r.FormValue("quantity"), 64)
 	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
 	closeDate := r.FormValue("closeDate")
 	if closeDate == "" {
@@ -580,21 +797,27 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ticker string
-	var quantity, costBasis float64
+	var currentQuantity, costBasis float64
 	var openDate string
 
 	err := db.QueryRow(`
 		SELECT ticker, quantity, cost_basis, open_date
 		FROM stock_positions
 		WHERE id = ? AND user_id = ?
-	`, positionID, userID).Scan(&ticker, &quantity, &costBasis, &openDate)
+	`, positionID, userID).Scan(&ticker, &currentQuantity, &costBasis, &openDate)
 
 	if err != nil {
 		http.Error(w, "Position not found", http.StatusNotFound)
 		return
 	}
 
-	profitLoss := (sellPrice - costBasis) * quantity
+	// Validate quantity to close
+	if quantityToClose <= 0 || quantityToClose > currentQuantity {
+		http.Error(w, "Invalid quantity to close", http.StatusBadRequest)
+		return
+	}
+
+	profitLoss := (sellPrice - costBasis) * quantityToClose
 
 	var existingID int
 	var existingQuantity, existingCostBasis, existingSellPrice, existingProfitLoss float64
@@ -605,9 +828,9 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	`, userID, ticker, openDate).Scan(&existingID, &existingQuantity, &existingCostBasis, &existingSellPrice, &existingProfitLoss)
 
 	if err == nil {
-		totalQuantity := existingQuantity + quantity
-		totalCostBasis := ((existingCostBasis * existingQuantity) + (costBasis * quantity)) / totalQuantity
-		totalSellPrice := ((existingSellPrice * existingQuantity) + (sellPrice * quantity)) / totalQuantity
+		totalQuantity := existingQuantity + quantityToClose
+		totalCostBasis := ((existingCostBasis * existingQuantity) + (costBasis * quantityToClose)) / totalQuantity
+		totalSellPrice := ((existingSellPrice * existingQuantity) + (sellPrice * quantityToClose)) / totalQuantity
 		totalProfitLoss := existingProfitLoss + profitLoss
 
 		_, err = db.Exec(`
@@ -624,7 +847,7 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		_, err = db.Exec(`
 			INSERT INTO closed_stocks (user_id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, userID, ticker, openDate, closeDate, quantity, costBasis, sellPrice, profitLoss)
+		`, userID, ticker, openDate, closeDate, quantityToClose, costBasis, sellPrice, profitLoss)
 
 		if err != nil {
 			http.Error(w, "Failed to close position: "+err.Error(), http.StatusInternalServerError)
@@ -632,9 +855,20 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err = db.Exec(`DELETE FROM stock_positions WHERE id = ?`, positionID)
+	// Update or delete the position based on remaining quantity
+	remainingQuantity := currentQuantity - quantityToClose
+	if remainingQuantity > 0 {
+		_, err = db.Exec(`
+			UPDATE stock_positions
+			SET quantity = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, remainingQuantity, positionID)
+	} else {
+		_, err = db.Exec(`DELETE FROM stock_positions WHERE id = ?`, positionID)
+	}
+
 	if err != nil {
-		http.Error(w, "Failed to remove position: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to update position: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -651,6 +885,7 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 	positionID := chi.URLParam(r, "id")
 	outcome := r.FormValue("outcome")
 
+	quantityToClose, _ := strconv.ParseFloat(r.FormValue("quantity"), 64)
 	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
 	sharePrice, _ := strconv.ParseFloat(r.FormValue("sharePrice"), 64)
 	closeDate := r.FormValue("closeDate")
@@ -665,18 +900,24 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ticker string
-	var price, premium, strike, collateral float64
+	var price, premium, strike, collateral, currentQuantity float64
 	var expDate, purchaseDate string
 	var optionType types.OptionType
 
 	err := db.QueryRow(`
-		SELECT ticker, price, premium, strike, exp_date, type, collateral, purchase_date
+		SELECT ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date
 		FROM option_positions
 		WHERE id = ? AND user_id = ?
-	`, positionID, userID).Scan(&ticker, &price, &premium, &strike, &expDate, &optionType, &collateral, &purchaseDate)
+	`, positionID, userID).Scan(&ticker, &price, &premium, &strike, &expDate, &optionType, &collateral, &currentQuantity, &purchaseDate)
 
 	if err != nil {
 		http.Error(w, "Position not found", http.StatusNotFound)
+		return
+	}
+
+	// Validate quantity to close
+	if quantityToClose <= 0 || quantityToClose > currentQuantity {
+		http.Error(w, "Invalid quantity to close", http.StatusBadRequest)
 		return
 	}
 
@@ -691,7 +932,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		// Called Away (CC): Sell shares at sharePrice, close option at $0
 		sellPrice = 0
 
-		// Remove 100 shares from stock position
+		// Remove 100 shares per contract from stock position
+		sharesToSell := quantityToClose * 100
 		var stockID int
 		var stockQuantity, stockCostBasis float64
 		var stockOpenDate string
@@ -701,14 +943,14 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 			WHERE user_id = ? AND ticker = ?
 		`, userID, ticker).Scan(&stockID, &stockQuantity, &stockCostBasis, &stockOpenDate)
 
-		if err == nil && stockQuantity >= 100 {
-			// Close 100 shares at the sharePrice
-			stockProfitLoss := (sharePrice - stockCostBasis) * 100
+		if err == nil && stockQuantity >= sharesToSell {
+			// Close shares at the sharePrice
+			stockProfitLoss := (sharePrice - stockCostBasis) * sharesToSell
 
 			_, err = db.Exec(`
 				INSERT INTO closed_stocks (user_id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss)
-				VALUES (?, ?, ?, ?, 100, ?, ?, ?)
-			`, userID, ticker, stockOpenDate, closeDate, stockCostBasis, sharePrice, stockProfitLoss)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			`, userID, ticker, stockOpenDate, closeDate, sharesToSell, stockCostBasis, sharePrice, stockProfitLoss)
 
 			if err != nil {
 				http.Error(w, "Failed to close stock position: "+err.Error(), http.StatusInternalServerError)
@@ -716,7 +958,7 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Update stock position quantity
-			newQuantity := stockQuantity - 100
+			newQuantity := stockQuantity - sharesToSell
 			if newQuantity > 0 {
 				_, err = db.Exec(`
 					UPDATE stock_positions
@@ -734,8 +976,11 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "assigned":
-		// Assigned (CSP): Add 100 shares at strike price, close option at $0
+		// Assigned (CSP): Add 100 shares per contract at strike price, close option at $0
 		sellPrice = 0
+
+		// Add 100 shares per contract
+		sharesToAdd := quantityToClose * 100
 
 		// Check if user already has shares of this stock
 		var existingID int
@@ -748,8 +993,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil {
 			// Update existing position
-			totalQuantity := existingQuantity + 100
-			totalCost := (existingCostBasis * existingQuantity) + (strike * 100)
+			totalQuantity := existingQuantity + sharesToAdd
+			totalCost := (existingCostBasis * existingQuantity) + (strike * sharesToAdd)
 			newCostBasis := totalCost / totalQuantity
 
 			_, err = db.Exec(`
@@ -761,8 +1006,8 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 			// Create new stock position
 			_, err = db.Exec(`
 				INSERT INTO stock_positions (user_id, ticker, quantity, cost_basis, open_date)
-				VALUES (?, ?, 100, ?, ?)
-			`, userID, ticker, strike, closeDate)
+				VALUES (?, ?, ?, ?, ?)
+			`, userID, ticker, sharesToAdd, strike, closeDate)
 		}
 
 		if err != nil {
@@ -775,30 +1020,46 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 		// sellPrice already set from form
 	}
 
-	// Calculate profit/loss
+	// Calculate profit/loss per contract
 	var profitLoss float64
 	switch optionType {
 	case types.Call, types.Put:
-		profitLoss = sellPrice - premium
+		profitLoss = (sellPrice - premium) * quantityToClose
 	case types.CSP, types.CC:
-		profitLoss = premium - sellPrice
+		profitLoss = (premium - sellPrice) * quantityToClose
 	}
+
+	// Calculate collateral for the quantity being closed
+	collateralForClosed := (collateral / currentQuantity) * quantityToClose
 
 	// Insert into closed_options
 	_, err = db.Exec(`
-		INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date, close_date, sell_price, profit_loss)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, userID, ticker, price, premium, strike, expDate, optionType, collateral, purchaseDate, closeDate, sellPrice, profitLoss)
+		INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date, close_date, sell_price, profit_loss)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, userID, ticker, price, premium, strike, expDate, optionType, collateralForClosed, quantityToClose, purchaseDate, closeDate, sellPrice, profitLoss)
 
 	if err != nil {
 		http.Error(w, "Failed to close position: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Delete from option_positions
-	_, err = db.Exec(`DELETE FROM option_positions WHERE id = ?`, positionID)
+	// Update or delete the position based on remaining quantity
+	remainingQuantity := currentQuantity - quantityToClose
+	if remainingQuantity > 0 {
+		// Partial close - update the position
+		remainingCollateral := collateral - collateralForClosed
+		_, err = db.Exec(`
+			UPDATE option_positions
+			SET quantity = ?, collateral = ?, updated_at = CURRENT_TIMESTAMP
+			WHERE id = ?
+		`, remainingQuantity, remainingCollateral, positionID)
+	} else {
+		// Full close - delete the position
+		_, err = db.Exec(`DELETE FROM option_positions WHERE id = ?`, positionID)
+	}
+
 	if err != nil {
-		http.Error(w, "Failed to remove position: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to update position: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

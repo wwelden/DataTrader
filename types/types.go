@@ -80,6 +80,7 @@ type OptionPos struct {
 	ExpDate      string     `json:"exp_date"`
 	Type         OptionType `json:"type"`
 	Collateral   float64    `json:"collateral"`
+	Quantity     float64    `json:"quantity"`
 	PurchaseDate string     `json:"purchase_date"`
 }
 
@@ -91,6 +92,7 @@ type ClosedOption struct {
 	ExpDate      string     `json:"exp_date"`
 	Type         OptionType `json:"type"`
 	Collateral   float64    `json:"collateral"`
+	Quantity     float64    `json:"quantity"`
 	PurchaseDate string     `json:"purchase_date"`
 	CloseDate    string     `json:"close_date"`
 	SellPrice    float64    `json:"sell_price"`
@@ -109,6 +111,9 @@ func (co ClosedOption) CalculateROR() float64 {
 	default:
 		return 0
 	}
+}
+func (co ClosedOption) RORPercent() float64 {
+	return co.CalculateROR() * 100
 }
 func (stock ClosedStock) PlPercent() float64 {
 	return (stock.ProfitLoss / (stock.CostBasis * stock.Quantity)) * 100

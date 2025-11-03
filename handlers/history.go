@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -22,12 +23,23 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(`
-		SELECT id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss
-		FROM closed_stocks
-		WHERE user_id = ?
-		ORDER BY close_date DESC
-	`, userID)
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	// Build query with filters
+	query := `SELECT id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss FROM closed_stocks WHERE user_id = ?`
+	args := []interface{}{userID}
+
+	if search != "" {
+		query += ` AND ticker LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+
+	query += ` ORDER BY close_date DESC`
+
+	rows, err := db.Query(query, args...)
 
 	if err != nil {
 		http.Error(w, "Failed to fetch closed stocks", http.StatusInternalServerError)
@@ -46,7 +58,10 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&cs.ID, &cs.Ticker, &cs.OpenDate, &cs.CloseDate, &cs.Quantity, &cs.CostBasis, &cs.SellPrice, &cs.ProfitLoss); err != nil {
 			continue
 		}
-		closedStocks = append(closedStocks, cs)
+		// Apply date filtering
+		if IsDateInRange(cs.CloseDate, dateFromInput, dateToInput) {
+			closedStocks = append(closedStocks, cs)
+		}
 	}
 
 	if len(closedStocks) == 0 {
@@ -96,6 +111,214 @@ func HandleGetClosedStocks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	htmlContent += `</tbody></table></div>`
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(htmlContent))
+}
+
+func HandleHistoryFilter(w http.ResponseWriter, r *http.Request) {
+	userID, ok := GetOrCreateUserID(r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	optionType := r.URL.Query().Get("type")
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	type ClosedStockWithID struct {
+		types.ClosedStock
+		ID int
+	}
+
+	var closedStocks []ClosedStockWithID
+
+	// Only fetch stocks if no option type filter is selected
+	if optionType == "" {
+		// Build stock query
+		stockQuery := `SELECT id, ticker, open_date, close_date, quantity, cost_basis, sell_price, profit_loss FROM closed_stocks WHERE user_id = ?`
+		stockArgs := []interface{}{userID}
+
+		if search != "" {
+			stockQuery += ` AND ticker LIKE ?`
+			stockArgs = append(stockArgs, "%"+search+"%")
+		}
+		stockQuery += ` ORDER BY close_date DESC`
+
+		// Fetch closed stocks
+		stockRows, err := db.Query(stockQuery, stockArgs...)
+		if err != nil {
+			http.Error(w, "Failed to fetch closed stocks", http.StatusInternalServerError)
+			return
+		}
+		defer stockRows.Close()
+
+		for stockRows.Next() {
+			var cs ClosedStockWithID
+			if err := stockRows.Scan(&cs.ID, &cs.Ticker, &cs.OpenDate, &cs.CloseDate, &cs.Quantity, &cs.CostBasis, &cs.SellPrice, &cs.ProfitLoss); err != nil {
+				continue
+			}
+			// Apply date filtering
+			if IsDateInRange(cs.CloseDate, dateFromInput, dateToInput) {
+				closedStocks = append(closedStocks, cs)
+			}
+		}
+	}
+
+	// Build option query
+	optionQuery := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date, close_date, sell_price, profit_loss FROM closed_options WHERE user_id = ?`
+	optionArgs := []interface{}{userID}
+
+	if search != "" {
+		optionQuery += ` AND ticker LIKE ?`
+		optionArgs = append(optionArgs, "%"+search+"%")
+	}
+	if optionType != "" {
+		optionQuery += ` AND type = ?`
+		optionArgs = append(optionArgs, optionType)
+	}
+	optionQuery += ` ORDER BY close_date DESC`
+
+	// Fetch closed options
+	optionRows, err := db.Query(optionQuery, optionArgs...)
+	if err != nil {
+		http.Error(w, "Failed to fetch closed options", http.StatusInternalServerError)
+		return
+	}
+	defer optionRows.Close()
+
+	type ClosedOptionWithID struct {
+		types.ClosedOption
+		ID int
+	}
+
+	var closedOptions []ClosedOptionWithID
+	for optionRows.Next() {
+		var co ClosedOptionWithID
+		if err := optionRows.Scan(&co.ID, &co.Ticker, &co.Price, &co.Premium, &co.Strike, &co.ExpDate, &co.Type, &co.Collateral, &co.PurchaseDate, &co.CloseDate, &co.SellPrice, &co.ProfitLoss); err != nil {
+			continue
+		}
+		// Apply date filtering
+		if IsDateInRange(co.CloseDate, dateFromInput, dateToInput) {
+			closedOptions = append(closedOptions, co)
+		}
+	}
+
+	// Build HTML response
+	htmlContent := `<div class="history-section">
+		<h3>Closed Stocks</h3>
+		<div id="closed-stocks-list" hx-get="/api/history/stocks" hx-trigger="historyUpdated from:body" hx-swap="innerHTML">`
+
+	if len(closedStocks) == 0 {
+		htmlContent += `<p class="empty-state">No closed stock trades found.</p>`
+	} else {
+		htmlContent += `<table class="history-table">
+			<thead>
+				<tr>
+					<th>Ticker</th>
+					<th>Open Date</th>
+					<th>Close Date</th>
+					<th>Quantity</th>
+					<th>Cost Basis</th>
+					<th>Sell Price</th>
+					<th>P/L</th>
+					<th>P/L %</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>`
+
+		for _, cs := range closedStocks {
+			plClass := "positive"
+			if cs.ProfitLoss < 0 {
+				plClass = "negative"
+			}
+			plPercent := cs.PlPercent()
+
+			htmlContent += fmt.Sprintf(`
+				<tr>
+					<td>%s</td>
+					<td>%s</td>
+					<td>%s</td>
+					<td>%.2f</td>
+					<td>$%.2f</td>
+					<td>$%.2f</td>
+					<td class="%s">$%.2f</td>
+					<td class="%s">%.2f%%</td>
+					<td>
+						<button class="btn btn-sm btn-primary" hx-get="/api/history/edit-stock/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
+						<button class="btn btn-sm btn-danger" hx-delete="/api/history/stock/%d" hx-target="#closed-stocks-list" hx-swap="outerHTML" hx-confirm="Delete this closed position?">Delete</button>
+					</td>
+				</tr>`, html.EscapeString(cs.Ticker), FormatDate(cs.OpenDate), FormatDate(cs.CloseDate), cs.Quantity,
+				cs.CostBasis, cs.SellPrice, plClass, cs.ProfitLoss, plClass, plPercent, cs.ID, cs.ID)
+		}
+
+		htmlContent += `</tbody></table>`
+	}
+
+	htmlContent += `</div></div>
+	<div class="history-section">
+		<h3>Closed Options</h3>
+		<div id="closed-options-list" hx-get="/api/history/options" hx-trigger="historyUpdated from:body" hx-swap="innerHTML">`
+
+	if len(closedOptions) == 0 {
+		htmlContent += `<p class="empty-state">No closed option trades found.</p>`
+	} else {
+		htmlContent += `<table class="history-table">
+			<thead>
+				<tr>
+					<th>Ticker</th>
+					<th>Type</th>
+					<th>Strike</th>
+					<th>Premium</th>
+					<th>Exp Date</th>
+					<th>Purchase Date</th>
+					<th>Close Date</th>
+					<th>Sell Price</th>
+					<th>P/L</th>
+					<th>P/L %</th>
+					<th>ROR %</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>`
+
+		for _, co := range closedOptions {
+			plClass := "positive"
+			if co.ProfitLoss < 0 {
+				plClass = "negative"
+			}
+			plPercent := co.PlPercent()
+			rorPercent := co.RORPercent()
+
+			htmlContent += fmt.Sprintf(`
+				<tr>
+					<td>%s</td>
+					<td>%s</td>
+					<td>$%.2f</td>
+					<td>$%.2f</td>
+					<td>%s</td>
+					<td>%s</td>
+					<td>%s</td>
+					<td>$%.2f</td>
+					<td class="%s">$%.2f</td>
+					<td class="%s">%.2f%%</td>
+					<td class="%s">%.2f%%</td>
+					<td>
+						<button class="btn btn-sm btn-primary" hx-get="/api/history/edit-option/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
+						<button class="btn btn-sm btn-danger" hx-delete="/api/history/option/%d" hx-target="#closed-options-list" hx-swap="outerHTML" hx-confirm="Delete this closed option?">Delete</button>
+					</td>
+				</tr>`, html.EscapeString(co.Ticker), co.Type, co.Strike, co.Premium,
+				FormatDate(co.ExpDate), FormatDate(co.PurchaseDate), FormatDate(co.CloseDate), co.SellPrice, plClass, co.ProfitLoss, plClass, plPercent, plClass, rorPercent, co.ID, co.ID)
+		}
+
+		htmlContent += `</tbody></table>`
+	}
+
+	htmlContent += `</div></div>`
+
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(htmlContent))
 }
@@ -388,12 +611,28 @@ func HandleGetClosedOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query(`
-		SELECT id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date, close_date, sell_price, profit_loss
-		FROM closed_options
-		WHERE user_id = ?
-		ORDER BY close_date DESC
-	`, userID)
+	// Get filter parameters
+	search := strings.ToUpper(r.URL.Query().Get("search"))
+	optionType := r.URL.Query().Get("type")
+	dateFromInput := r.URL.Query().Get("dateFrom")
+	dateToInput := r.URL.Query().Get("dateTo")
+
+	// Build query with filters
+	query := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, purchase_date, close_date, sell_price, profit_loss FROM closed_options WHERE user_id = ?`
+	args := []interface{}{userID}
+
+	if search != "" {
+		query += ` AND ticker LIKE ?`
+		args = append(args, "%"+search+"%")
+	}
+	if optionType != "" {
+		query += ` AND type = ?`
+		args = append(args, optionType)
+	}
+
+	query += ` ORDER BY close_date DESC`
+
+	rows, err := db.Query(query, args...)
 
 	if err != nil {
 		http.Error(w, "Failed to fetch closed options", http.StatusInternalServerError)
@@ -412,7 +651,10 @@ func HandleGetClosedOptions(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&co.ID, &co.Ticker, &co.Price, &co.Premium, &co.Strike, &co.ExpDate, &co.Type, &co.Collateral, &co.PurchaseDate, &co.CloseDate, &co.SellPrice, &co.ProfitLoss); err != nil {
 			continue
 		}
-		closedOptions = append(closedOptions, co)
+		// Apply date filtering
+		if IsDateInRange(co.CloseDate, dateFromInput, dateToInput) {
+			closedOptions = append(closedOptions, co)
+		}
 	}
 
 	if len(closedOptions) == 0 {

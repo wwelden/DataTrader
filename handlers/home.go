@@ -66,6 +66,15 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COALESCE(SUM(profit_loss), 0) FROM closed_options WHERE user_id = ? AND profit_loss < 0", userID).Scan(&optionLosses)
 	totalLossAmount := stockLosses + optionLosses
 
+	// Calculate average profit and average loss
+	var avgProfit, avgLoss float64
+	if totalWins > 0 {
+		avgProfit = totalGains / float64(totalWins)
+	}
+	if totalLosses > 0 {
+		avgLoss = totalLossAmount / float64(totalLosses)
+	}
+
 	var profitFactor float64
 	if totalLossAmount != 0 {
 		profitFactor = totalGains / -totalLossAmount
@@ -106,7 +115,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		</div>
 		<div class="stat-card">
 			<h3>Win/Loss</h3>
-			<p class="stat-value">%d/%d</p>
+			<p class="stat-value"><span class="positive">$%.2f</span> / <span class="negative">$%.2f</span></p>
 		</div>
 		<div class="stat-card">
 			<h3>Win Rate</h3>
@@ -116,7 +125,7 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 			<h3>Profit Factor</h3>
 			<p class="stat-value %s">%.2f</p>
 		</div>
-	`, totalPositions, stockCount, optionCount, totalClosed, plClass, totalPL, totalWins, totalLosses, winRateClass, winRate, profitFactorClass, profitFactor)
+	`, totalPositions, stockCount, optionCount, totalClosed, plClass, totalPL, avgProfit, avgLoss, winRateClass, winRate, profitFactorClass, profitFactor)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(html))

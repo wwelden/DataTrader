@@ -59,6 +59,7 @@ func main() {
 		r.Post("/api/positions/add", handlers.HandleAddPosition)
 		r.Get("/api/positions/stocks", handlers.HandleGetStockPositions)
 		r.Get("/api/positions/options", handlers.HandleGetOptionPositions)
+		r.Get("/api/positions/filter", handlers.HandlePositionsFilter)
 
 		r.Get("/api/positions/edit-stock/{id}", handlers.HandleEditStockPosition)
 		r.Post("/api/positions/update-stock/{id}", handlers.HandleUpdateStockPosition)
@@ -75,6 +76,7 @@ func main() {
 
 		r.Get("/api/history/stocks", handlers.HandleGetClosedStocks)
 		r.Get("/api/history/options", handlers.HandleGetClosedOptions)
+		r.Get("/api/history/filter", handlers.HandleHistoryFilter)
 
 		r.Get("/api/history/edit-stock/{id}", handlers.HandleEditClosedStock)
 		r.Post("/api/history/update-stock/{id}", handlers.HandleUpdateClosedStock)
