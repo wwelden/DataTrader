@@ -2,14 +2,14 @@ package handlers
 
 import (
 	"backend/utils"
+	"backend/views/components"
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 )
 
 func HandleModalImportCSV(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join("views", "modal", "import-csv.html"))
+	components.ImportCSVModal().Render(r.Context(), w)
 }
 
 func HandleImportCSV(w http.ResponseWriter, r *http.Request) {

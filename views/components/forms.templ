@@ -1,0 +1,115 @@
+package components
+
+templ FormGroup(label, inputType, name, placeholder string, required bool) {
+	<div class="form-group">
+		<label for={ name }>{ label }</label>
+		<input
+			type={ inputType }
+			id={ name }
+			name={ name }
+			if required {
+				required
+			}
+			placeholder={ placeholder }
+		/>
+	</div>
+}
+
+templ FormGroupWithValue(label, inputType, name, value, placeholder string, required bool) {
+	<div class="form-group">
+		<label for={ name }>{ label }</label>
+		<input
+			type={ inputType }
+			id={ name }
+			name={ name }
+			value={ value }
+			if required {
+				required
+			}
+			placeholder={ placeholder }
+		/>
+	</div>
+}
+
+templ FormGroupNumber(label, name, step, placeholder string, required bool) {
+	<div class="form-group">
+		<label for={ name }>{ label }</label>
+		<input
+			type="number"
+			id={ name }
+			name={ name }
+			step={ step }
+			if required {
+				required
+			}
+			placeholder={ placeholder }
+		/>
+	</div>
+}
+
+templ FormGroupNumberWithValue(label, name, step, value, placeholder string, required bool) {
+	<div class="form-group">
+		<label for={ name }>{ label }</label>
+		<input
+			type="number"
+			id={ name }
+			name={ name }
+			step={ step }
+			value={ value }
+			if required {
+				required
+			}
+			placeholder={ placeholder }
+		/>
+	</div>
+}
+
+templ FormActions(submitText, cancelAction string) {
+	<div class="form-actions">
+		<button type="submit" class="btn btn-primary">
+			{ submitText }
+		</button>
+		<button
+			type="button"
+			class="btn btn-secondary"
+			hx-get={ cancelAction }
+			hx-target="#modal-container"
+		>
+			Cancel
+		</button>
+	</div>
+}
+
+templ FilterInput(name, placeholder string) {
+	<div class="filter-group">
+		<input
+			type="text"
+			name={ name }
+			placeholder={ placeholder }
+			if name == "search" {
+				style="text-transform: uppercase"
+			}
+		/>
+	</div>
+}
+
+templ FilterDate(name, placeholder string) {
+	<div class="filter-group">
+		<input
+			type="date"
+			name={ name }
+			placeholder={ placeholder }
+		/>
+	</div>
+}
+
+templ FilterSelect(name string, options []string) {
+	<div class="filter-group">
+		<select name={ name }>
+			<option value="">All Types</option>
+			for _, option := range options {
+				<option value={ option }>{ option }</option>
+			}
+		</select>
+	</div>
+}

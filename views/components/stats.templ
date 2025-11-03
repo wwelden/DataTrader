@@ -1,0 +1,60 @@
+package components
+
+import "fmt"
+
+type StatsData struct {
+	TotalPositions int
+	StockCount     int
+	OptionCount    int
+	ClosedCount    int
+	TotalPL        float64
+	TotalGains     float64
+	TotalLosses    float64
+	WinRate        float64
+	ProfitFactor   float64
+}
+
+templ StatsCards(stats StatsData) {
+	<div class="stat-card">
+		<h3>Total Positions</h3>
+		<p class="stat-value">{ fmt.Sprintf("%d", stats.TotalPositions) }</p>
+	</div>
+	<div class="stat-card">
+		<h3>Open Stocks</h3>
+		<p class="stat-value">{ fmt.Sprintf("%d", stats.StockCount) }</p>
+	</div>
+	<div class="stat-card">
+		<h3>Open Options</h3>
+		<p class="stat-value">{ fmt.Sprintf("%d", stats.OptionCount) }</p>
+	</div>
+	<div class="stat-card">
+		<h3>Closed Trades</h3>
+		<p class="stat-value">{ fmt.Sprintf("%d", stats.ClosedCount) }</p>
+	</div>
+	<div class="stat-card">
+		<h3>Total P/L</h3>
+		<p class={ "stat-value", templ.KV("positive", stats.TotalPL >= 0), templ.KV("negative", stats.TotalPL < 0) }>
+			{ fmt.Sprintf("$%.2f", stats.TotalPL) }
+		</p>
+	</div>
+	<div class="stat-card">
+		<h3>Win/Loss</h3>
+		<p class="stat-value">
+			<span class="positive">{ fmt.Sprintf("$%.2f", stats.TotalGains) }</span>
+			{ " / " }
+			<span class="negative">{ fmt.Sprintf("$%.2f", stats.TotalLosses) }</span>
+		</p>
+	</div>
+	<div class="stat-card">
+		<h3>Win Rate</h3>
+		<p class={ "stat-value", templ.KV("positive", stats.WinRate >= 50), templ.KV("negative", stats.WinRate < 50) }>
+			{ fmt.Sprintf("%.1f%%", stats.WinRate) }
+		</p>
+	</div>
+	<div class="stat-card">
+		<h3>Profit Factor</h3>
+		<p class={ "stat-value", templ.KV("positive", stats.ProfitFactor >= 1), templ.KV("negative", stats.ProfitFactor < 1) }>
+			{ fmt.Sprintf("%.2f", stats.ProfitFactor) }
+		</p>
+	</div>
+}

@@ -1,0 +1,62 @@
+package components
+
+templ Hero() {
+	<section class="hero">
+		<div class="hero-content">
+			<h2>Welcome to DataTrader</h2>
+			<p>Manage your stock and options portfolio with ease</p>
+		</div>
+	</section>
+}
+
+templ DashboardStats() {
+	<section class="dashboard">
+		<div
+			class="stats-container"
+			hx-get="/api/stats"
+			hx-trigger="load"
+			hx-swap="innerHTML"
+		>
+			<div class="stat-card">
+				<h3>Total Positions</h3>
+				<p class="stat-value">Loading...</p>
+			</div>
+			<div class="stat-card">
+				<h3>Open Stocks</h3>
+				<p class="stat-value">Loading...</p>
+			</div>
+			<div class="stat-card">
+				<h3>Open Options</h3>
+				<p class="stat-value">Loading...</p>
+			</div>
+			<div class="stat-card">
+				<h3>Closed Trades</h3>
+				<p class="stat-value">Loading...</p>
+			</div>
+			<div class="stat-card">
+				<h3>Total P/L</h3>
+				<p class="stat-value">Loading...</p>
+			</div>
+		</div>
+	</section>
+}
+
+templ QuickActions() {
+	<section class="quick-actions">
+		<h3>Quick Actions</h3>
+		<div class="action-buttons">
+			<a href="/positions.html" class="btn btn-primary">
+				View Positions
+			</a>
+			<a href="/history.html" class="btn btn-secondary">
+				View History
+			</a>
+		</div>
+	</section>
+}
+
+templ HomePage() {
+	@Hero()
+	@DashboardStats()
+	@QuickActions()
+}

@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"backend/types"
+	"backend/views/components"
 	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,27 +15,27 @@ import (
 )
 
 func HandlePositions(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join("views", "positions.html"))
+	components.AppLayout("Positions - DATATRADER", "positions", components.PositionsPage()).Render(r.Context(), w)
 }
 
 func HandleModalAddPosition(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join("views", "modal", "add-position.html"))
+	components.AddPositionModal().Render(r.Context(), w)
 }
 
 func HandleModalAddPositionFields(w http.ResponseWriter, r *http.Request) {
 	positionType := r.URL.Query().Get("positionType")
 
 	if positionType == "option" {
-		http.ServeFile(w, r, filepath.Join("views", "modal", "add-position-fields.html"))
+		components.AddPositionOptionFields().Render(r.Context(), w)
 	} else if positionType == "stock" {
-		http.ServeFile(w, r, filepath.Join("views", "modal", "add-position-stock-fields.html"))
+		components.AddPositionStockFields().Render(r.Context(), w)
 	} else {
 		w.Write([]byte(""))
 	}
 }
 
 func HandleModalClose(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +133,7 @@ func HandleAddPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", "positionAdded")
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
@@ -143,12 +143,10 @@ func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get filter parameters
 	search := strings.ToUpper(r.URL.Query().Get("search"))
 	dateFromInput := r.URL.Query().Get("dateFrom")
 	dateToInput := r.URL.Query().Get("dateTo")
 
-	// Build query with filters
 	query := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
 	args := []interface{}{userID}
 
@@ -173,48 +171,13 @@ func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&pos.ID, &pos.Ticker, &pos.Quantity, &pos.CostBasis, &pos.OpenDate); err != nil {
 			continue
 		}
-		// Apply date filtering
 		if IsDateInRange(pos.OpenDate, dateFromInput, dateToInput) {
 			positions = append(positions, pos)
 		}
 	}
 
-	if len(positions) == 0 {
-		w.Write([]byte(`<div id="stock-positions-list" hx-get="/api/positions/stocks" hx-trigger="positionAdded from:body, positionDeleted from:body" hx-swap="outerHTML"><p>No stock positions found.</p></div>`))
-		return
-	}
-
-	// Render HTML table wrapped in div
-	htmlContent := `<div id="stock-positions-list" hx-get="/api/positions/stocks" hx-trigger="positionAdded from:body, positionDeleted from:body" hx-swap="outerHTML"><table class="positions-table">
-		<thead>
-			<tr>
-				<th>Ticker</th>
-				<th>Quantity</th>
-				<th>Cost Basis</th>
-				<th>Open Date</th>
-				<th>Actions</th>
-			</tr>
-		</thead>
-		<tbody>`
-
-	for _, pos := range positions {
-		htmlContent += fmt.Sprintf(`
-			<tr>
-				<td>%s</td>
-				<td>%.2f</td>
-				<td>$%.2f</td>
-				<td>%s</td>
-				<td>
-					<button class="btn btn-sm btn-primary" hx-get="/api/positions/edit-stock/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
-					<button class="btn btn-sm btn-danger" hx-delete="/api/positions/stock/%d" hx-target="#stock-positions-list" hx-swap="outerHTML" hx-confirm="Delete this position?">Delete</button>
-					<button class="btn btn-sm btn-warning" hx-post="/api/positions/close/%d" hx-target="#modal-container" hx-swap="innerHTML">Close</button>
-				</td>
-			</tr>`, html.EscapeString(pos.Ticker), pos.Quantity, pos.CostBasis, FormatDate(pos.OpenDate), pos.ID, pos.ID, pos.ID)
-	}
-
-	htmlContent += `</tbody></table></div>`
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(htmlContent))
+	components.StockPositionsTable(positions, FormatDate).Render(r.Context(), w)
 }
 
 func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
@@ -224,13 +187,11 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get filter parameters
 	search := strings.ToUpper(r.URL.Query().Get("search"))
 	optionType := r.URL.Query().Get("type")
 	dateFromInput := r.URL.Query().Get("dateFrom")
 	dateToInput := r.URL.Query().Get("dateTo")
 
-	// Build query with filters
 	query := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
 	args := []interface{}{userID}
 
@@ -259,54 +220,13 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&pos.ID, &pos.Ticker, &pos.Price, &pos.Premium, &pos.Strike, &pos.ExpDate, &pos.Type, &pos.Collateral, &pos.Quantity, &pos.PurchaseDate); err != nil {
 			continue
 		}
-		// Apply date filtering
 		if IsDateInRange(pos.PurchaseDate, dateFromInput, dateToInput) {
 			positions = append(positions, pos)
 		}
 	}
 
-	if len(positions) == 0 {
-		w.Write([]byte(`<div id="option-positions-list" hx-get="/api/positions/options" hx-trigger="positionAdded from:body, positionDeleted from:body" hx-swap="outerHTML"><p>No option positions found.</p></div>`))
-		return
-	}
-
-	// Render HTML table wrapped in div
-	htmlContent := `<div id="option-positions-list" hx-get="/api/positions/options" hx-trigger="positionAdded from:body, positionDeleted from:body" hx-swap="outerHTML"><table class="positions-table">
-		<thead>
-			<tr>
-				<th>Ticker</th>
-				<th>Type</th>
-				<th>Contracts</th>
-				<th>Strike</th>
-				<th>Premium</th>
-				<th>Exp Date</th>
-				<th>Purchase Date</th>
-				<th>Actions</th>
-			</tr>
-		</thead>
-		<tbody>`
-
-	for _, pos := range positions {
-		htmlContent += fmt.Sprintf(`
-			<tr>
-				<td>%s</td>
-				<td>%s</td>
-				<td>%.0f</td>
-				<td>$%.2f</td>
-				<td>$%.2f</td>
-				<td>%s</td>
-				<td>%s</td>
-				<td>
-					<button class="btn btn-sm btn-primary" hx-get="/api/positions/edit-option/%d" hx-target="#modal-container" hx-swap="innerHTML">Edit</button>
-					<button class="btn btn-sm btn-danger" hx-delete="/api/positions/option/%d" hx-target="#option-positions-list" hx-swap="outerHTML" hx-confirm="Delete this position?">Delete</button>
-					<button class="btn btn-sm btn-warning" hx-post="/api/positions/close-option-modal/%d" hx-target="#modal-container" hx-swap="innerHTML">Close</button>
-				</td>
-			</tr>`, html.EscapeString(pos.Ticker), pos.Type, pos.Quantity, pos.Strike, pos.Premium, FormatDate(pos.ExpDate), FormatDate(pos.PurchaseDate), pos.ID, pos.ID, pos.ID)
-	}
-
-	htmlContent += `</tbody></table></div>`
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte(htmlContent))
+	components.OptionPositionsTable(positions, FormatDate).Render(r.Context(), w)
 }
 
 func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
@@ -873,7 +793,7 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", "positionClosed")
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
@@ -1064,7 +984,7 @@ func HandleCloseOptionPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", "positionClosed")
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func HandleEditStockPosition(w http.ResponseWriter, r *http.Request) {
@@ -1237,7 +1157,7 @@ func HandleUpdateStockPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", "positionAdded")
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func HandleUpdateOptionPosition(w http.ResponseWriter, r *http.Request) {
@@ -1274,7 +1194,7 @@ func HandleUpdateOptionPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("HX-Trigger", "positionAdded")
-	http.ServeFile(w, r, filepath.Join("views", "modal", "close.html"))
+	components.ModalClose().Render(r.Context(), w)
 }
 
 func selected(current, value string) string {

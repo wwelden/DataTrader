@@ -62,6 +62,7 @@ type User struct {
 }
 
 type ClosedStock struct {
+	ID         int     `json:"id"`
 	Ticker     string  `json:"ticker"`
 	OpenDate   string  `json:"open_date"`
 	CloseDate  string  `json:"close_date"`
@@ -85,6 +86,7 @@ type OptionPos struct {
 }
 
 type ClosedOption struct {
+	ID           int        `json:"id"`
 	Ticker       string     `json:"ticker"`
 	Price        float64    `json:"price"`
 	Premium      float64    `json:"premium"`

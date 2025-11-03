@@ -2,32 +2,15 @@ package handlers
 
 import (
 	"backend/middleware"
+	"backend/views/components"
 	"database/sql"
-	"html/template"
 	"net/http"
-	"path/filepath"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type LoginData struct {
-	Error string
-}
-
-type SignupData struct {
-	Error string
-}
-
-// HandleLogin serves the login page
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles(filepath.Join("views", "login.html"))
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	data := LoginData{}
-	tmpl.Execute(w, data)
+	components.LoginPage("").Render(r.Context(), w)
 }
 
 // HandleLoginPost processes login form submission
@@ -41,16 +24,15 @@ func HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 
 	if username == "" || password == "" {
-		renderLoginError(w, "Username and password are required")
+		renderLoginError(w, r, "Username and password are required")
 		return
 	}
 
-	// Get user from database
 	var userID int
 	var hashedPassword string
 	err := db.QueryRow("SELECT id, password FROM users WHERE username = ?", username).Scan(&userID, &hashedPassword)
 	if err == sql.ErrNoRows {
-		renderLoginError(w, "Invalid username or password")
+		renderLoginError(w, r, "Invalid username or password")
 		return
 	}
 	if err != nil {
@@ -58,9 +40,8 @@ func HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)); err != nil {
-		renderLoginError(w, "Invalid username or password")
+		renderLoginError(w, r, "Invalid username or password")
 		return
 	}
 
@@ -86,16 +67,8 @@ func HandleLoginPost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// HandleSignup serves the signup page
 func HandleSignup(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles(filepath.Join("views", "signup.html"))
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	data := SignupData{}
-	tmpl.Execute(w, data)
+	components.SignupPage("").Render(r.Context(), w)
 }
 
 // HandleSignupPost processes signup form submission
@@ -109,19 +82,18 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	confirmPassword := r.FormValue("confirm_password")
 
-	// Validation
 	if username == "" || password == "" {
-		renderSignupError(w, "Username and password are required")
+		renderSignupError(w, r, "Username and password are required")
 		return
 	}
 
 	if len(password) < 8 {
-		renderSignupError(w, "Password must be at least 8 characters long")
+		renderSignupError(w, r, "Password must be at least 8 characters long")
 		return
 	}
 
 	if password != confirmPassword {
-		renderSignupError(w, "Passwords do not match")
+		renderSignupError(w, r, "Passwords do not match")
 		return
 	}
 
@@ -134,7 +106,7 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if exists > 0 {
-		renderSignupError(w, "Username already taken")
+		renderSignupError(w, r, "Username already taken")
 		return
 	}
 
@@ -202,24 +174,10 @@ func HandleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-func renderLoginError(w http.ResponseWriter, errorMsg string) {
-	tmpl, err := template.ParseFiles(filepath.Join("views", "login.html"))
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	data := LoginData{Error: errorMsg}
-	tmpl.Execute(w, data)
+func renderLoginError(w http.ResponseWriter, r *http.Request, errorMsg string) {
+	components.LoginPage(errorMsg).Render(r.Context(), w)
 }
 
-func renderSignupError(w http.ResponseWriter, errorMsg string) {
-	tmpl, err := template.ParseFiles(filepath.Join("views", "signup.html"))
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	data := SignupData{Error: errorMsg}
-	tmpl.Execute(w, data)
+func renderSignupError(w http.ResponseWriter, r *http.Request, errorMsg string) {
+	components.SignupPage(errorMsg).Render(r.Context(), w)
 }

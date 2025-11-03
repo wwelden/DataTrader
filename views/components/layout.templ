@@ -1,0 +1,69 @@
+package components
+
+import (
+	"context"
+	"io"
+)
+
+templ Base(title string, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/public/style.css"/>
+			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+		</head>
+		<body>
+			@content
+		</body>
+	</html>
+}
+
+templ Navbar(activePage string) {
+	<nav class="navbar">
+		<div class="nav-container">
+			<h1 class="logo">DATATRADER</h1>
+			<ul class="nav-links">
+				<li>
+					<a href="/" class={ "nav-link", templ.KV("active", activePage == "home") }>Home</a>
+				</li>
+				<li>
+					<a href="/positions.html" class={ "nav-link", templ.KV("active", activePage == "positions") }>Positions</a>
+				</li>
+				<li>
+					<a href="/history.html" class={ "nav-link", templ.KV("active", activePage == "history") }>History</a>
+				</li>
+			</ul>
+			<button hx-post="/api/logout" hx-target="body" class="logout-btn">
+				Logout
+			</button>
+		</div>
+	</nav>
+}
+
+templ AppLayout(title, activePage string, content templ.Component) {
+	@Base(title, templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+		return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
+			_, err := io.WriteString(w, `<div id="app">`)
+			if err != nil {
+				return err
+			}
+			err = Navbar(activePage).Render(ctx, w)
+			if err != nil {
+				return err
+			}
+			_, err = io.WriteString(w, `<main class="main-content">`)
+			if err != nil {
+				return err
+			}
+			err = content.Render(ctx, w)
+			if err != nil {
+				return err
+			}
+			_, err = io.WriteString(w, `</main></div><div id="modal-container"></div>`)
+			return err
+		}).Render(ctx, w)
+	}))
+}

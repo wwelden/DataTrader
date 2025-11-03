@@ -1,0 +1,46 @@
+package components
+
+templ ButtonPrimary(text, action string) {
+	<button
+		class="btn btn-primary"
+		hx-get={ action }
+		hx-target="#modal-container"
+		hx-swap="innerHTML"
+	>
+		{ text }
+	</button>
+}
+
+templ ButtonEdit(id int, endpoint string) {
+	<button
+		class="btn btn-sm btn-primary"
+		hx-get={ endpoint }
+		hx-target="#modal-container"
+		hx-swap="innerHTML"
+	>
+		Edit
+	</button>
+}
+
+templ ButtonDelete(id int, endpoint, target, confirmMsg string) {
+	<button
+		class="btn btn-sm btn-danger"
+		hx-delete={ endpoint }
+		hx-target={ target }
+		hx-swap="outerHTML"
+		hx-confirm={ confirmMsg }
+	>
+		Delete
+	</button>
+}
+
+templ ButtonClose(id int, endpoint string) {
+	<button
+		class="btn btn-sm btn-warning"
+		hx-post={ endpoint }
+		hx-target="#modal-container"
+		hx-swap="innerHTML"
+	>
+		Close
+	</button>
+}
