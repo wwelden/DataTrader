@@ -13,8 +13,8 @@ Stack:
 
 
 Features:
-- [x]Stock position tracking
-- [x]Option position tracking
-- [x]User registration and login
-- [ ]CSV trade import
-- [x]Update/Delete/Close positions
+- [x] Stock position tracking
+- [x] Option position tracking
+- [x] User registration and login
+- [ ] CSV trade import
+- [x] Update/Delete/Close positions
