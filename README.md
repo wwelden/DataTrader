@@ -17,5 +17,5 @@ Features:
 - [x] Option position tracking
 - [x] User registration and login
 - [x] CSV trade import
-- [ ] CSV trade processing
+- [x] CSV trade processing
 - [x] Update/Delete/Close positions
