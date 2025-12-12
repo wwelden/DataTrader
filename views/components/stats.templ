@@ -8,8 +8,8 @@ type StatsData struct {
 	OptionCount    int
 	ClosedCount    int
 	TotalPL        float64
-	TotalGains     float64
-	TotalLosses    float64
+	AvgWin         float64
+	AvgLoss        float64
 	WinRate        float64
 	ProfitFactor   float64
 }
@@ -37,12 +37,12 @@ templ StatsCards(stats StatsData) {
 			{ fmt.Sprintf("$%.2f", stats.TotalPL) }
 		</p>
 	</div>
-	<div class="stat-card">
-		<h3>Win/Loss</h3>
-		<p class="stat-value">
-			<span class="positive">{ fmt.Sprintf("$%.2f", stats.TotalGains) }</span>
-			{ " / " }
-			<span class="negative">{ fmt.Sprintf("$%.2f", stats.TotalLosses) }</span>
+	<div class="stat-card stat-card-wide">
+		<h3>Avg Win / Avg Loss</h3>
+		<p class="stat-value stat-value-dual">
+			<span class="positive">{ fmt.Sprintf("$%.2f", stats.AvgWin) }</span>
+			<span class="stat-separator">/</span>
+			<span class="negative">{ fmt.Sprintf("$%.2f", stats.AvgLoss) }</span>
 		</p>
 	</div>
 	<div class="stat-card">

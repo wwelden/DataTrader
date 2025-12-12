@@ -71,6 +71,7 @@ func main() {
 
 		r.Post("/api/positions/close/{id}", handlers.HandleClosePosition)
 		r.Post("/api/positions/close-option-modal/{id}", handlers.HandleCloseOptionModal)
+		r.Get("/api/positions/outcome-fields/{id}", handlers.HandleOutcomeFields)
 		r.Post("/api/positions/close-stock/{id}", handlers.HandleCloseStockPosition)
 		r.Post("/api/positions/close-option/{id}", handlers.HandleCloseOptionPosition)
 
@@ -90,6 +91,12 @@ func main() {
 	})
 
 	port := os.Getenv("PORT")
+	if port == "" {
+		port = ":8080"
+	}
+	if port[0] != ':' {
+		port = ":" + port
+	}
 	slog.Info("HTTP server started", "listenAddr", port)
 	http.ListenAndServe(port, router)
 }

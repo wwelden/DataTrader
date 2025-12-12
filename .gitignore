@@ -65,3 +65,5 @@ tmp/
 # Logs
 *.log
 logs/
+
+docs/

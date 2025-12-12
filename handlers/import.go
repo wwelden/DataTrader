@@ -115,7 +115,8 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 		normalizedDate := NormalizeDateToMMDDYY(trade.Date)
 		normalizedExpDate := NormalizeDateToMMDDYY(trade.ExpDate)
 		switch trade.Code {
-		case "BTO", "STO":
+		case "BTO":
+			// Buy to Open: creates a Call or Put position (we're buying the option)
 			_, err = db.Exec(`
 				INSERT INTO option_positions (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -124,7 +125,24 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 				optionCount++
 			}
 
-		case "STC", "BTC":
+		case "STO":
+			// Sell to Open: creates CSP (if Put) or CC (if Call) - we're selling/writing the option
+			positionType := trade.OptionType
+			if trade.OptionType == "Put" {
+				positionType = "CSP"
+			} else if trade.OptionType == "Call" {
+				positionType = "CC"
+			}
+			_, err = db.Exec(`
+				INSERT INTO option_positions (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, userID, trade.Ticker, trade.Price, trade.Premium, trade.Strike, normalizedExpDate, positionType, 0, trade.Quantity, normalizedDate)
+			if err == nil {
+				optionCount++
+			}
+
+		case "STC":
+			// Sell to Close: closes a Call or Put position (one we bought via BTO)
 			var positionID int
 			var positionQuantity float64
 			var purchaseDate, positionType string
@@ -142,17 +160,68 @@ func HandleImportCSV(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				quantityToClose := trade.Quantity
 				if quantityToClose > positionQuantity {
-					quantityToClose = positionQuantity // Can't close more than we have
+					quantityToClose = positionQuantity
 				}
 
-				var profitLoss float64
 				sellPrice := trade.Price
+				// P/L for bought options: (sell price - buy price) * quantity * 100 (each contract = 100 shares)
+				profitLoss := (sellPrice - premium) * quantityToClose * 100
 
-				if trade.Code == "STC" {
-					profitLoss = (sellPrice - premium) * quantityToClose
-				} else { // BTC
-					profitLoss = (premium - sellPrice) * quantityToClose
+				collateralForClosed := (collateral / positionQuantity) * quantityToClose
+
+				_, err = db.Exec(`
+					INSERT INTO closed_options (user_id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date, close_date, sell_price, profit_loss)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, userID, trade.Ticker, trade.Price, premium, trade.Strike, normalizedExpDate, positionType, collateralForClosed, quantityToClose, purchaseDate, normalizedDate, sellPrice, profitLoss)
+
+				remainingQuantity := positionQuantity - quantityToClose
+				if remainingQuantity > 0 {
+					remainingCollateral := collateral - collateralForClosed
+					_, err = db.Exec(`
+						UPDATE option_positions
+						SET quantity = ?, collateral = ?, updated_at = CURRENT_TIMESTAMP
+						WHERE id = ?
+					`, remainingQuantity, remainingCollateral, positionID)
+				} else {
+					_, err = db.Exec(`DELETE FROM option_positions WHERE id = ?`, positionID)
 				}
+
+				optionCount++
+			}
+
+		case "BTC":
+			// Buy to Close: closes a CSP or CC position (one we sold via STO)
+			// Need to look for CSP if the trade is a Put, or CC if the trade is a Call
+			searchType := trade.OptionType
+			if trade.OptionType == "Put" {
+				searchType = "CSP"
+			} else if trade.OptionType == "Call" {
+				searchType = "CC"
+			}
+
+			var positionID int
+			var positionQuantity float64
+			var purchaseDate, positionType string
+			var premium, collateral float64
+
+			err := db.QueryRow(`
+				SELECT id, quantity, premium, collateral, purchase_date, type
+				FROM option_positions
+				WHERE user_id = ? AND ticker = ? AND strike = ? AND exp_date = ? AND type = ?
+				ORDER BY purchase_date ASC
+				LIMIT 1
+			`, userID, trade.Ticker, trade.Strike, normalizedExpDate, searchType).Scan(
+				&positionID, &positionQuantity, &premium, &collateral, &purchaseDate, &positionType)
+
+			if err == nil {
+				quantityToClose := trade.Quantity
+				if quantityToClose > positionQuantity {
+					quantityToClose = positionQuantity
+				}
+
+				sellPrice := trade.Price
+				// P/L for sold options: (premium received - cost to close) * quantity * 100
+				profitLoss := (premium - sellPrice) * quantityToClose * 100
 
 				collateralForClosed := (collateral / positionQuantity) * quantityToClose
 

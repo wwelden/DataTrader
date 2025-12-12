@@ -146,7 +146,7 @@ func HandleGetStockPositions(w http.ResponseWriter, r *http.Request) {
 	dateFromInput := r.URL.Query().Get("dateFrom")
 	dateToInput := r.URL.Query().Get("dateTo")
 
-	query := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
+	query := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ? AND quantity > 0`
 	args := []interface{}{userID}
 
 	if search != "" {
@@ -191,7 +191,7 @@ func HandleGetOptionPositions(w http.ResponseWriter, r *http.Request) {
 	dateFromInput := r.URL.Query().Get("dateFrom")
 	dateToInput := r.URL.Query().Get("dateTo")
 
-	query := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
+	query := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ? AND quantity > 0`
 	args := []interface{}{userID}
 
 	if search != "" {
@@ -243,7 +243,7 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 	var stockPositions []types.StockPos
 
 	if optionType == "" {
-		stockQuery := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ?`
+		stockQuery := `SELECT id, ticker, quantity, cost_basis, open_date FROM stock_positions WHERE user_id = ? AND quantity > 0`
 		stockArgs := []interface{}{userID}
 
 		if search != "" {
@@ -270,7 +270,7 @@ func HandlePositionsFilter(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	optionQuery := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ?`
+	optionQuery := `SELECT id, ticker, price, premium, strike, exp_date, type, collateral, quantity, purchase_date FROM option_positions WHERE user_id = ? AND quantity > 0`
 	optionArgs := []interface{}{userID}
 
 	if search != "" {
@@ -484,7 +484,11 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 						<form hx-post="/api/positions/close-option/%s" hx-target="#modal-container" hx-swap="innerHTML">
 							<div class="form-group">
 								<label>Outcome</label>
-								<select id="outcome" name="outcome" required onchange="toggleOutcomeFields(this.value)">
+								<select id="outcome" name="outcome" required
+									hx-get="/api/positions/outcome-fields/%s"
+									hx-target="#outcome-fields"
+									hx-swap="innerHTML"
+									hx-trigger="change">
 									<option value="">Select outcome...</option>
 									%s
 								</select>
@@ -497,25 +501,7 @@ func HandleClosePosition(w http.ResponseWriter, r *http.Request) {
 						</form>
 					</div>
 				</div>
-				<script>
-					function toggleOutcomeFields(outcome) {
-						const fieldsDiv = document.getElementById('outcome-fields');
-						const optionType = '%s';
-						const strike = %.2f;
-						const expDate = '%s';
-
-						if (outcome === 'expired') {
-							fieldsDiv.innerHTML = '<input type="hidden" name="sellPrice" value="0"><input type="hidden" name="closeDate" value="' + expDate + '">';
-						} else if (outcome === 'called_away') {
-							fieldsDiv.innerHTML = '<div class="form-group"><label>Share Sale Price</label><input type="number" name="sharePrice" step="0.01" required placeholder="' + strike + '" /></div><input type="hidden" name="sellPrice" value="0"><div class="form-group"><label>Close Date (defaults to expiration)</label><input type="date" name="closeDate" value="' + expDate + '" /></div>';
-						} else if (outcome === 'assigned') {
-							fieldsDiv.innerHTML = '<input type="hidden" name="sellPrice" value="0"><div class="form-group"><label>Close Date (defaults to expiration)</label><input type="date" name="closeDate" value="' + expDate + '" /></div>';
-						} else if (outcome === 'closed') {
-							fieldsDiv.innerHTML = '<div class="form-group"><label>Buy to Close Price</label><input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" /></div><div class="form-group"><label>Close Date (defaults to today)</label><input type="date" name="closeDate" /></div>';
-						}
-					}
-				</script>
-			`, ticker, optionType, positionID, outcomeOptions, optionType, strike, expDate, premium)
+			`, ticker, optionType, positionID, positionID, outcomeOptions)
 		} else {
 			html = fmt.Sprintf(`
 				<div class="modal">
@@ -612,7 +598,11 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 						</div>
 						<div class="form-group">
 							<label>Outcome</label>
-							<select id="outcome" name="outcome" required onchange="toggleOutcomeFields(this.value)">
+							<select id="outcome" name="outcome" required
+								hx-get="/api/positions/outcome-fields/%s"
+								hx-target="#outcome-fields"
+								hx-swap="innerHTML"
+								hx-trigger="change">
 								<option value="">Select outcome...</option>
 								%s
 							</select>
@@ -625,25 +615,7 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 					</form>
 				</div>
 			</div>
-			<script>
-				function toggleOutcomeFields(outcome) {
-					const fieldsDiv = document.getElementById('outcome-fields');
-					const optionType = '%s';
-					const strike = %.2f;
-					const expDate = '%s';
-
-					if (outcome === 'expired') {
-						fieldsDiv.innerHTML = '<input type="hidden" name="sellPrice" value="0"><input type="hidden" name="closeDate" value="' + expDate + '">';
-					} else if (outcome === 'called_away') {
-						fieldsDiv.innerHTML = '<div class="form-group"><label>Share Sale Price</label><input type="number" name="sharePrice" step="0.01" required placeholder="' + strike + '" /></div><input type="hidden" name="sellPrice" value="0"><div class="form-group"><label>Close Date (defaults to expiration)</label><input type="date" name="closeDate" value="' + expDate + '" /></div>';
-					} else if (outcome === 'assigned') {
-						fieldsDiv.innerHTML = '<input type="hidden" name="sellPrice" value="0"><div class="form-group"><label>Close Date (defaults to expiration)</label><input type="date" name="closeDate" value="' + expDate + '" /></div>';
-					} else if (outcome === 'closed') {
-						fieldsDiv.innerHTML = '<div class="form-group"><label>Buy to Close Price</label><input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" /></div><div class="form-group"><label>Close Date (defaults to today)</label><input type="date" name="closeDate" /></div>';
-					}
-				}
-			</script>
-		`, ticker, optionType, positionID, quantity, quantity, quantity, quantity, outcomeOptions, optionType, strike, expDate, premium)
+		`, ticker, optionType, positionID, quantity, quantity, quantity, quantity, positionID, outcomeOptions)
 	} else {
 		html = fmt.Sprintf(`
 			<div class="modal">
@@ -681,6 +653,75 @@ func HandleCloseOptionModal(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 
+func HandleOutcomeFields(w http.ResponseWriter, r *http.Request) {
+	positionID := chi.URLParam(r, "id")
+	outcome := r.URL.Query().Get("outcome")
+
+	if positionID == "" {
+		w.Write([]byte(""))
+		return
+	}
+
+	userID, ok := GetOrCreateUserID(r)
+	if !ok {
+		w.Write([]byte(""))
+		return
+	}
+
+	var premium, strike float64
+	var expDate string
+
+	err := db.QueryRow(`
+		SELECT premium, strike, exp_date
+		FROM option_positions
+		WHERE id = ? AND user_id = ?
+	`, positionID, userID).Scan(&premium, &strike, &expDate)
+
+	if err != nil {
+		w.Write([]byte(""))
+		return
+	}
+
+	var html string
+	switch outcome {
+	case "expired":
+		html = fmt.Sprintf(`<input type="hidden" name="sellPrice" value="0"><input type="hidden" name="closeDate" value="%s">`, expDate)
+	case "called_away":
+		html = fmt.Sprintf(`
+			<div class="form-group">
+				<label>Share Sale Price</label>
+				<input type="number" name="sharePrice" step="0.01" required placeholder="%.2f" />
+			</div>
+			<input type="hidden" name="sellPrice" value="0">
+			<div class="form-group">
+				<label>Close Date (defaults to expiration)</label>
+				<input type="date" name="closeDate" value="%s" />
+			</div>`, strike, expDate)
+	case "assigned":
+		html = fmt.Sprintf(`
+			<input type="hidden" name="sellPrice" value="0">
+			<div class="form-group">
+				<label>Close Date (defaults to expiration)</label>
+				<input type="date" name="closeDate" value="%s" />
+			</div>`, expDate)
+	case "closed":
+		html = fmt.Sprintf(`
+			<div class="form-group">
+				<label>Buy to Close Price</label>
+				<input type="number" name="sellPrice" step="0.01" required placeholder="%.2f" />
+			</div>
+			<div class="form-group">
+				<label>Close Date (defaults to today)</label>
+				<input type="date" name="closeDate" />
+			</div>`, premium)
+	default:
+		html = ""
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(html))
+}
+
 func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
@@ -688,13 +729,6 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	positionID := chi.URLParam(r, "id")
-
-	quantityToClose, _ := strconv.ParseFloat(r.FormValue("quantity"), 64)
-	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
-	closeDate := r.FormValue("closeDate")
-	if closeDate == "" {
-		closeDate = time.Now().Format("2006-01-02")
-	}
 
 	userID, ok := GetOrCreateUserID(r)
 	if !ok {
@@ -717,9 +751,27 @@ func HandleCloseStockPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if quantityToClose <= 0 || quantityToClose > currentQuantity {
-		http.Error(w, "Invalid quantity to close", http.StatusBadRequest)
-		return
+	// Parse quantity - if not provided or invalid, default to full position
+	quantityStr := r.FormValue("quantity")
+	var quantityToClose float64
+	if quantityStr == "" {
+		quantityToClose = currentQuantity
+	} else {
+		quantityToClose, _ = strconv.ParseFloat(quantityStr, 64)
+	}
+
+	sellPrice, _ := strconv.ParseFloat(r.FormValue("sellPrice"), 64)
+	closeDate := r.FormValue("closeDate")
+	if closeDate == "" {
+		closeDate = time.Now().Format("2006-01-02")
+	}
+
+	// Validate quantity
+	if quantityToClose <= 0 {
+		quantityToClose = currentQuantity
+	}
+	if quantityToClose > currentQuantity {
+		quantityToClose = currentQuantity
 	}
 
 	profitLoss := (sellPrice - costBasis) * quantityToClose

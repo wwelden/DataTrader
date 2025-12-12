@@ -65,6 +65,16 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		profitFactor = totalGains / -totalLossAmount
 	}
 
+	// Calculate average win and average loss
+	totalLosses := losingStocks + losingOptions
+	var avgWin, avgLoss float64
+	if totalWins > 0 {
+		avgWin = totalGains / float64(totalWins)
+	}
+	if totalLosses > 0 {
+		avgLoss = totalLossAmount / float64(totalLosses)
+	}
+
 	totalPositions := stockCount + optionCount
 
 	stats := components.StatsData{
@@ -73,8 +83,8 @@ func HandleStats(w http.ResponseWriter, r *http.Request) {
 		OptionCount:    optionCount,
 		ClosedCount:    totalClosed,
 		TotalPL:        totalPL,
-		TotalGains:     totalGains,
-		TotalLosses:    totalLossAmount,
+		AvgWin:         avgWin,
+		AvgLoss:        avgLoss,
 		WinRate:        winRate,
 		ProfitFactor:   profitFactor,
 	}

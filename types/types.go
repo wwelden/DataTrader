@@ -51,7 +51,6 @@ type StockPos struct {
 type User struct {
 	Username       string               `json:"username"`
 	Password       string               `json:"password,omitempty"`
-	ClerkUserID    string               `json:"clerk_user_id"`
 	StockTrades    []StockTrade         `json:"stock_trades"`
 	OptionTrades   []OptionTrade        `json:"option_trades"`
 	Positions      map[string]StockPos  `json:"positions"`
