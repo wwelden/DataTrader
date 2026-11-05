@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -123,7 +124,11 @@ CREATE INDEX IF NOT EXISTS idx_closed_options_user_id ON closed_options(user_id)
 
 func InitDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "./database.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./database.db"
+	}
+	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}

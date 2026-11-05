@@ -1,0 +1,7 @@
+.git
+tmp
+backend
+datatrader
+*.db
+.env
+*.pdf

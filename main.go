@@ -13,7 +13,8 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	// .env is optional; in production, config comes from real environment variables.
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 
