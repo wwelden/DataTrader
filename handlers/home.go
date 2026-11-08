@@ -1,9 +1,26 @@
 package handlers
 
 import (
+	"backend/middleware"
 	"backend/views/components"
+	"context"
 	"net/http"
 )
+
+// HandleRoot serves the dashboard to logged-in users and the public
+// landing page to everyone else, so visitors can see the project without
+// an account.
+func HandleRoot(w http.ResponseWriter, r *http.Request) {
+	session, ok := middleware.SessionFromRequest(r)
+	if !ok {
+		components.LandingPage().Render(r.Context(), w)
+		return
+	}
+
+	ctx := context.WithValue(r.Context(), middleware.UserIDContextKey, session.UserID)
+	ctx = context.WithValue(ctx, middleware.IsDemoContextKey, session.IsDemo)
+	HandleHome(w, r.WithContext(ctx))
+}
 
 func HandleHome(w http.ResponseWriter, r *http.Request) {
 	components.AppLayout("DATATRADER - Trading Portfolio Manager", "home", components.HomePage()).Render(r.Context(), w)

@@ -13,9 +13,11 @@ import (
 type contextKey string
 
 const UserIDContextKey contextKey = "userID"
+const IsDemoContextKey contextKey = "isDemo"
 
 type Session struct {
 	UserID    int
+	IsDemo    bool
 	CreatedAt time.Time
 	ExpiresAt time.Time
 }
@@ -38,6 +40,15 @@ func GenerateSessionToken() (string, error) {
 }
 
 func CreateSession(userID int) (string, error) {
+	return createSession(userID, false, 7*24*time.Hour)
+}
+
+// CreateDemoSession creates a short-lived session for a throwaway demo user.
+func CreateDemoSession(userID int, ttl time.Duration) (string, error) {
+	return createSession(userID, true, ttl)
+}
+
+func createSession(userID int, isDemo bool, ttl time.Duration) (string, error) {
 	token, err := GenerateSessionToken()
 	if err != nil {
 		return "", err
@@ -45,8 +56,9 @@ func CreateSession(userID int) (string, error) {
 
 	session := &Session{
 		UserID:    userID,
+		IsDemo:    isDemo,
 		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(24 * time.Hour * 7),
+		ExpiresAt: time.Now().Add(ttl),
 	}
 
 	store.mu.Lock()
@@ -117,8 +129,25 @@ func RequireAuth(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), UserIDContextKey, session.UserID)
+		ctx = context.WithValue(ctx, IsDemoContextKey, session.IsDemo)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// SessionFromRequest returns the valid session for the request's cookie, if any.
+// Unlike RequireAuth it never redirects, so public pages can adapt to logged-in users.
+func SessionFromRequest(r *http.Request) (*Session, bool) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		return nil, false
+	}
+	return GetSession(cookie.Value)
+}
+
+// IsDemo reports whether the current request belongs to a demo session.
+func IsDemo(ctx context.Context) bool {
+	isDemo, _ := ctx.Value(IsDemoContextKey).(bool)
+	return isDemo
 }
 
 func GetUserIDFromContext(r *http.Request) (int, bool) {

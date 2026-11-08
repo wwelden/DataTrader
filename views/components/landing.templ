@@ -1,0 +1,174 @@
+package components
+
+const githubURL = "https://github.com/wwelden/DataTrader"
+
+// LandingPage is the public page shown at / to logged-out visitors.
+// It is plain HTML and CSS: the demo button is an ordinary form POST,
+// so the page doesn't even load HTMX.
+templ LandingPage() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>DATATRADER - Trading journal for stocks and options</title>
+			<meta name="description" content="DataTrader tracks stock and option positions, imports brokerage CSVs, and reports win rate, P/L and profit factor. Built with Go, Templ, HTMX and SQLite."/>
+			<link rel="stylesheet" href="/public/style.css"/>
+		</head>
+		<body class="landing">
+			<header class="landing-nav">
+				<a href="/" class="logo">DATATRADER</a>
+				<nav class="landing-nav-links">
+					<a href={ templ.SafeURL(githubURL) } class="landing-nav-link">GitHub</a>
+					<a href="/login" class="landing-nav-link">Log in</a>
+					<a href="/signup" class="btn btn-secondary btn-sm">Sign up</a>
+				</nav>
+			</header>
+			<main>
+				@landingHero()
+				@landingFeatures()
+				@landingStack()
+				@landingCTA()
+			</main>
+			<footer class="landing-footer">
+				<span>DataTrader</span>
+				<a href={ templ.SafeURL(githubURL) }>Source on GitHub</a>
+			</footer>
+		</body>
+	</html>
+}
+
+templ demoButton(label string) {
+	<form method="POST" action="/demo" class="demo-form">
+		<button type="submit" class="btn btn-primary btn-lg">{ label }</button>
+	</form>
+}
+
+templ landingHero() {
+	<section class="landing-hero">
+		<div class="landing-hero-copy">
+			<p class="landing-eyebrow">Trading journal · Stocks &amp; Options</p>
+			<h1>See how your trades <span class="accent">actually</span> perform.</h1>
+			<p class="landing-lede">
+				DataTrader tracks open and closed positions, including cash-secured puts and covered calls,
+				imports your brokerage CSV, and turns it into win rate, P/L and profit factor.
+			</p>
+			<div class="landing-actions">
+				@demoButton("Try the live demo")
+				<a href={ templ.SafeURL(githubURL) } class="btn btn-secondary btn-lg">View the source</a>
+			</div>
+			<p class="landing-note">No sign-up. The demo opens a private sandbox account with sample trades. It resets after 24 hours.</p>
+		</div>
+		@landingPreview()
+	</section>
+}
+
+// landingPreview is a static mock of the dashboard using the same numbers the demo account loads with.
+templ landingPreview() {
+	<div class="landing-preview" aria-hidden="true">
+		<div class="preview-window">
+			<div class="preview-bar">
+				<span></span><span></span><span></span>
+				<p>datatrader / dashboard</p>
+			</div>
+			<div class="preview-stats">
+				<div class="preview-stat">
+					<h3>Total P/L</h3>
+					<p class="positive">+$1,209.20</p>
+				</div>
+				<div class="preview-stat">
+					<h3>Win Rate</h3>
+					<p>64.3%</p>
+				</div>
+				<div class="preview-stat">
+					<h3>Profit Factor</h3>
+					<p>1.47</p>
+				</div>
+			</div>
+			<table class="preview-table">
+				<thead>
+					<tr>
+						<th>Ticker</th>
+						<th>Type</th>
+						<th>Strike</th>
+						<th>P/L</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>PLTR</td>
+						<td><span class="preview-tag">Call</span></td>
+						<td>$25</td>
+						<td class="positive">+$570.00</td>
+					</tr>
+					<tr>
+						<td>QQQ</td>
+						<td><span class="preview-tag">Put</span></td>
+						<td>$430</td>
+						<td class="negative">-$310.00</td>
+					</tr>
+					<tr>
+						<td>AAPL</td>
+						<td><span class="preview-tag">CC</span></td>
+						<td>$185</td>
+						<td class="positive">+$240.00</td>
+					</tr>
+					<tr>
+						<td>AMD</td>
+						<td><span class="preview-tag">CSP</span></td>
+						<td>$140</td>
+						<td class="positive">+$230.00</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
+templ landingFeatures() {
+	<section class="landing-section">
+		<h2>What it does</h2>
+		<div class="landing-grid">
+			<article class="landing-card">
+				<h3>Stocks and options</h3>
+				<p>Track shares alongside calls, puts, cash-secured puts and covered calls. Close a position as sold, expired or called away.</p>
+			</article>
+			<article class="landing-card">
+				<h3>Brokerage CSV import</h3>
+				<p>Upload a transaction export and DataTrader matches buys to sells and opens to closes, averaging cost basis as it goes.</p>
+			</article>
+			<article class="landing-card">
+				<h3>Performance stats</h3>
+				<p>Win rate, average win vs. average loss, profit factor and total P/L across every closed trade.</p>
+			</article>
+			<article class="landing-card">
+				<h3>Filterable history</h3>
+				<p>Search closed trades by ticker and date range, then edit or delete any record inline.</p>
+			</article>
+		</div>
+	</section>
+}
+
+templ landingStack() {
+	<section class="landing-section">
+		<h2>How it's built</h2>
+		<p class="landing-section-lede">
+			Every page is rendered on the server. There is no hand-written JavaScript: interactions are
+			HTML attributes that HTMX uses to swap in server-rendered fragments, so the app stays fast and simple.
+		</p>
+		<ul class="landing-stack">
+			<li><strong>Go</strong><span>chi router, session auth, bcrypt</span></li>
+			<li><strong>Templ</strong><span>type-safe, compiled HTML components</span></li>
+			<li><strong>HTMX</strong><span>partial page updates, no client JS</span></li>
+			<li><strong>SQLite</strong><span>single-file database</span></li>
+		</ul>
+	</section>
+}
+
+templ landingCTA() {
+	<section class="landing-cta">
+		<h2>Take a look around</h2>
+		<p>Open, edit and close positions in the demo. Nothing you do affects anyone else.</p>
+		@demoButton("Launch the demo")
+	</section>
+}

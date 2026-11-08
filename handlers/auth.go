@@ -5,6 +5,7 @@ import (
 	"backend/views/components"
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -82,6 +83,11 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if strings.HasPrefix(strings.ToLower(username), demoUserPrefix) {
+		renderSignupError(w, r, "Usernames starting with \"demo-\" are reserved")
+		return
+	}
+
 	if len(password) < 8 {
 		renderSignupError(w, r, "Password must be at least 8 characters long")
 		return
@@ -155,7 +161,13 @@ func HandleLogout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 	})
 
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	// The logout button posts via HTMX; ask it for a full page load so the
+	// landing page replaces the whole document instead of being swapped into <body>.
+	if r.Header.Get("HX-Request") != "" {
+		w.Header().Set("HX-Redirect", "/")
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func renderLoginError(w http.ResponseWriter, r *http.Request, errorMsg string) {

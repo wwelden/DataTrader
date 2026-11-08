@@ -19,3 +19,4 @@ Features:
 - [x] CSV trade import
 - [x] CSV trade processing
 - [x] Update/Delete/Close positions
+- [x] Public landing page with a one-click demo account (no sign-up)
