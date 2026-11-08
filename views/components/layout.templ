@@ -1,6 +1,7 @@
 package components
 
 import (
+	"backend/middleware"
 	"context"
 	"io"
 )
@@ -19,6 +20,18 @@ templ Base(title string, content templ.Component) {
 			@content
 		</body>
 	</html>
+}
+
+// DemoBanner tells demo visitors they're in a sandbox and offers a real account.
+templ DemoBanner() {
+	if middleware.IsDemo(ctx) {
+		<div class="demo-banner">
+			<p>
+				You're exploring a <strong>demo account</strong> with sample trades. Changes are private to you and reset after 24 hours.
+			</p>
+			<a href="/signup">Create your own account →</a>
+		</div>
+	}
 }
 
 templ Navbar(activePage string) {
@@ -47,6 +60,10 @@ templ AppLayout(title, activePage string, content templ.Component) {
 	@Base(title, templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 		return templ.ComponentFunc(func(ctx context.Context, w io.Writer) error {
 			_, err := io.WriteString(w, `<div id="app">`)
+			if err != nil {
+				return err
+			}
+			err = DemoBanner().Render(ctx, w)
 			if err != nil {
 				return err
 			}
