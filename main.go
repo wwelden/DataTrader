@@ -46,10 +46,12 @@ func main() {
 	router.Post("/api/logout", handlers.HandleLogout)
 	router.Post("/demo", handlers.HandleDemoPost)
 
+	// Public: landing page for visitors, dashboard for logged-in users.
+	router.Get("/", handlers.HandleRoot)
+
 	router.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth)
 
-		r.Get("/", handlers.HandleHome)
 		r.Get("/positions.html", handlers.HandlePositions)
 		r.Get("/history.html", handlers.HandleHistory)
 
