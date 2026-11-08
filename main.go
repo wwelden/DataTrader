@@ -24,6 +24,7 @@ func main() {
 	handlers.SetDB(db)
 
 	middleware.StartSessionCleanup()
+	handlers.StartDemoCleanup()
 
 	router := chi.NewMux()
 
@@ -43,6 +44,7 @@ func main() {
 	router.Get("/signup", handlers.HandleSignup)
 	router.Post("/api/auth/signup", handlers.HandleSignupPost)
 	router.Post("/api/logout", handlers.HandleLogout)
+	router.Post("/demo", handlers.HandleDemoPost)
 
 	router.Group(func(r chi.Router) {
 		r.Use(middleware.RequireAuth)

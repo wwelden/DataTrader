@@ -5,6 +5,7 @@ import (
 	"backend/views/components"
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -79,6 +80,11 @@ func HandleSignupPost(w http.ResponseWriter, r *http.Request) {
 
 	if username == "" || password == "" {
 		renderSignupError(w, r, "Username and password are required")
+		return
+	}
+
+	if strings.HasPrefix(strings.ToLower(username), demoUserPrefix) {
+		renderSignupError(w, r, "Usernames starting with \"demo-\" are reserved")
 		return
 	}
 
