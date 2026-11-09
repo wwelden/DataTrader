@@ -20,3 +20,11 @@ Features:
 - [x] CSV trade processing
 - [x] Update/Delete/Close positions
 - [x] Public landing page with a one-click demo account (no sign-up)
+
+## Running tests
+
+```sh
+go test -race ./...
+```
+
+Tests use a temporary SQLite database, so they need cgo (a C compiler). The same suite, plus `gofmt`, `go vet`, and a check that the generated templ files are current, runs on every push and pull request via GitHub Actions (`.github/workflows/test.yml`).

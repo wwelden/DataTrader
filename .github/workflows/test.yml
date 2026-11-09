@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # go-sqlite3 needs cgo; ubuntu runners ship with gcc.
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check generated templ files are up to date
+        run: |
+          templ_version=$(go list -m -f '{{.Version}}' github.com/a-h/templ)
+          go run github.com/a-h/templ/cmd/templ@"$templ_version" generate
+          git diff --exit-code -- '*_templ.go' || {
+            echo "Run 'templ generate' and commit the result."
+            exit 1
+          }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build (dev tag)
+        run: go build -tags dev ./...
+
+      - name: Test
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
