@@ -1,4 +1,3 @@
-//+build dev
 //go:build dev
 // +build dev
 
