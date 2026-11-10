@@ -3,10 +3,14 @@ package main
 import (
 	"backend/handlers"
 	"backend/middleware"
+	"context"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
@@ -102,6 +106,18 @@ func main() {
 	if port[0] != ':' {
 		port = ":" + port
 	}
+	// Stop cleanly when Railway (or Ctrl-C) asks the process to exit, so a
+	// redeploy is not reported as a crash and the database is closed properly.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatal(err)
+	}
 	slog.Info("HTTP server started", "listenAddr", port)
-	http.ListenAndServe(port, router)
+	if err := runServer(ctx, ln, router, shutdownTimeout); err != nil {
+		log.Fatal(err)
+	}
+	slog.Info("HTTP server stopped")
 }
