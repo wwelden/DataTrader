@@ -4,6 +4,7 @@ import (
 	"backend/handlers"
 	"backend/middleware"
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -17,9 +18,16 @@ import (
 )
 
 func main() {
+	// run holds the deferred cleanup, so it always happens before we exit.
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	// .env is optional; in production, config comes from real environment variables.
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
+		return err
 	}
 
 	InitDB()
@@ -113,11 +121,19 @@ func main() {
 
 	ln, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	slog.Info("HTTP server started", "listenAddr", port)
-	if err := runServer(ctx, ln, router, shutdownTimeout); err != nil {
-		log.Fatal(err)
+	err = runServer(ctx, ln, router, shutdownTimeout)
+	if errors.Is(err, errShutdownTimedOut) {
+		// We were asked to stop and did; a slow request was cut off. That is
+		// worth a warning, not a failed exit.
+		slog.Warn("HTTP server stopped before all requests finished", "err", err)
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 	slog.Info("HTTP server stopped")
+	return nil
 }

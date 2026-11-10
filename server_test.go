@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"io"
@@ -107,21 +108,39 @@ func TestRunServerLetsInFlightRequestsFinish(t *testing.T) {
 	}
 }
 
-func TestRunServerGivesUpAfterTimeout(t *testing.T) {
+func TestRunServerClosesConnectionsAfterTimeout(t *testing.T) {
 	started := make(chan struct{})
 	block := make(chan struct{})
 	t.Cleanup(func() { close(block) })
 	url, cancel, done := start(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
-		<-block
+		<-block // never finishes on its own
 	}), 50*time.Millisecond)
 
-	go http.Get(url)
+	clientErr := make(chan error, 1)
+	go func() {
+		resp, err := http.Get(url)
+		if err == nil {
+			resp.Body.Close()
+		}
+		clientErr <- err
+	}()
 	<-started
 	cancel()
 
-	if err := waitDone(t, done); !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("runServer returned %v, want context.DeadlineExceeded", err)
+	err := waitDone(t, done)
+	if !errors.Is(err, errShutdownTimedOut) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("runServer returned %v, want errShutdownTimedOut wrapping context.DeadlineExceeded", err)
+	}
+
+	// The stuck request's connection must be closed, not left hanging.
+	select {
+	case err := <-clientErr:
+		if err == nil {
+			t.Error("stuck request completed; want its connection closed")
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("stuck request's connection was left open after shutdown")
 	}
 }
 
@@ -152,6 +171,20 @@ func TestBinaryExitsZeroOnSIGTERM(t *testing.T) {
 		t.Fatalf("build failed: %v\n%s", err, out)
 	}
 
+	for _, stalledRequest := range []bool{false, true} {
+		name := "idle"
+		if stalledRequest {
+			name = "shutdown timeout"
+		}
+		t.Run(name, func(t *testing.T) {
+			testBinaryExitsZeroOnSIGTERM(t, bin, stalledRequest)
+		})
+	}
+}
+
+func testBinaryExitsZeroOnSIGTERM(t *testing.T, bin string, stalledRequest bool) {
+	t.Helper()
+	dir := t.TempDir()
 	ln := listen(t)
 	port := ln.Addr().(*net.TCPAddr).Port
 	ln.Close()
@@ -164,36 +197,94 @@ func TestBinaryExitsZeroOnSIGTERM(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cmd.Process.Kill() })
 
+	// Wait exactly once, in the background, so every path can both observe the
+	// exit and make sure the child is reaped before reading its logs. Closing
+	// exited lets cleanup wait again without consuming the result.
+	var waitErr error
+	exited := make(chan struct{})
+	go func() {
+		waitErr = cmd.Wait()
+		close(exited)
+	}()
+	stopChild := func() {
+		cmd.Process.Kill()
+		<-exited
+	}
+	t.Cleanup(stopChild)
+
+	// Each readiness probe is bounded, so a server that accepts but never
+	// answers cannot stall the loop past its deadline.
+	client := &http.Client{Timeout: time.Second}
 	url := "http://127.0.0.1:" + strconv.Itoa(port) + "/login"
-	deadline := time.Now().Add(10 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for {
-		resp, err := http.Get(url)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			break
 		}
-		if time.Now().After(deadline) {
+		select {
+		case <-exited:
+			t.Fatalf("server exited before it was ready (%v)\nlogs:\n%s", waitErr, logs.String())
+		default:
+		}
+		if ctx.Err() != nil {
+			stopChild()
 			t.Fatalf("server never came up: %v\nlogs:\n%s", err, logs.String())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	if stalledRequest {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		if err := conn.SetDeadline(time.Now().Add(2 * time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		// The login handler reads form data. Hold its body open, and wait for
+		// 100 Continue to prove the handler is reading before sending SIGTERM.
+		_, err = io.WriteString(conn, "POST /api/auth/login HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 100\r\nExpect: 100-continue\r\n\r\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusContinue {
+			t.Fatalf("status = %d, want 100 Continue", resp.StatusCode)
+		}
+		if err := conn.SetDeadline(time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatal(err)
 	}
-	waitErr := make(chan error, 1)
-	go func() { waitErr <- cmd.Wait() }()
 	select {
-	case err := <-waitErr:
-		if err != nil {
-			t.Fatalf("process exited with %v, want exit code 0\nlogs:\n%s", err, logs.String())
+	case <-exited:
+		if waitErr != nil {
+			t.Fatalf("process exited with %v, want exit code 0\nlogs:\n%s", waitErr, logs.String())
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("process did not exit after SIGTERM")
+		stopChild()
+		t.Fatalf("process did not exit after SIGTERM\nlogs:\n%s", logs.String())
 	}
 	if !strings.Contains(logs.String(), "HTTP server stopped") {
 		t.Errorf("expected a clean-stop log line, got:\n%s", logs.String())
+	}
+	if stalledRequest && !strings.Contains(logs.String(), "shutdown grace period expired") {
+		t.Errorf("expected a shutdown-timeout warning, got:\n%s", logs.String())
 	}
 }

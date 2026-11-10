@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -12,9 +13,14 @@ import (
 // process is asked to stop. Railway waits a few seconds before force-killing.
 const shutdownTimeout = 5 * time.Second
 
+// errShutdownTimedOut means a requested shutdown went ahead, but some requests
+// were still running when the grace period ran out and were cut off.
+var errShutdownTimedOut = errors.New("shutdown grace period expired; remaining connections were closed")
+
 // runServer serves h on ln until ctx is cancelled, then stops accepting new
 // connections and waits up to timeout for in-flight requests to finish.
-// It returns nil on a clean shutdown so the process can exit 0.
+// It returns nil on a clean shutdown, errShutdownTimedOut (wrapped) if
+// requests had to be cut off, and any other error if serving itself failed.
 func runServer(ctx context.Context, ln net.Listener, h http.Handler, timeout time.Duration) error {
 	srv := &http.Server{
 		Handler:           h,
@@ -33,11 +39,21 @@ func runServer(ctx context.Context, ln net.Listener, h http.Handler, timeout tim
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return err
+	shutdownErr := srv.Shutdown(shutdownCtx)
+	var closeErr error
+	if shutdownErr != nil {
+		// Shutdown gives up waiting but leaves slow connections open; close them.
+		closeErr = srv.Close()
 	}
-	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	err := <-serveErr
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
 	}
-	return nil
+	if err != nil || closeErr != nil {
+		return errors.Join(shutdownErr, closeErr, err)
+	}
+	if errors.Is(shutdownErr, context.DeadlineExceeded) {
+		return fmt.Errorf("%w: %w", errShutdownTimedOut, shutdownErr)
+	}
+	return shutdownErr
 }
