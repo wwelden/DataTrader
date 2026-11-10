@@ -3,19 +3,31 @@ package main
 import (
 	"backend/handlers"
 	"backend/middleware"
+	"context"
+	"errors"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 )
 
 func main() {
+	// run holds the deferred cleanup, so it always happens before we exit.
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	// .env is optional; in production, config comes from real environment variables.
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
+		return err
 	}
 
 	InitDB()
@@ -102,6 +114,26 @@ func main() {
 	if port[0] != ':' {
 		port = ":" + port
 	}
+	// Stop cleanly when Railway (or Ctrl-C) asks the process to exit, so a
+	// redeploy is not reported as a crash and the database is closed properly.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		return err
+	}
 	slog.Info("HTTP server started", "listenAddr", port)
-	http.ListenAndServe(port, router)
+	err = runServer(ctx, ln, router, shutdownTimeout)
+	if errors.Is(err, errShutdownTimedOut) {
+		// We were asked to stop and did; a slow request was cut off. That is
+		// worth a warning, not a failed exit.
+		slog.Warn("HTTP server stopped before all requests finished", "err", err)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	slog.Info("HTTP server stopped")
+	return nil
 }
